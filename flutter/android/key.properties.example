@@ -1,0 +1,14 @@
+# Android imzalama ayarlari. Gercek dosya (key.properties) depoya GIRMEZ —
+# .gitignore'da. Bu ornek, yeni bir derleme makinesinde neyin doldurulacagini
+# gosterir.
+#
+# Anahtar deposu kasada durur, kaynak agacinda degil:
+#   Z:\ElpoProje\SkyDesk-secrets\android-keystore\skydesk-release.p12
+#
+# storeFile yolunda ters bolu kullanma — Java .properties onu kacis karakteri
+# sayar ve yol sessizce bozulur. Duz bolu ile yaz.
+
+storePassword=__SET_IN_DEPLOY__
+keyPassword=__SET_IN_DEPLOY__
+keyAlias=skydesk
+storeFile=Z:/ElpoProje/SkyDesk-secrets/android-keystore/skydesk-release.p12

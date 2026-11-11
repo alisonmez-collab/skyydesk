@@ -1,0 +1,11 @@
+# src/flutter_ffi.rs dosyasinin ozeti (satir sonlari LF'e normalize edilerek).
+# Bu deger degistiyse bridge dosyalari eskimis OLABILIR:
+#   flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs #     --dart-output ./flutter/lib/generated_bridge.dart
+# ve bu damgayi yenile:  tr -d '' < src/flutter_ffi.rs | sha256sum
+#
+# 14.09.2026'da dosyaya bir JNI girisi eklendi (Java_ffi_FFI_stopService).
+# O giris Java'dan cagriliyor, bridge'den GECMIYOR; uretilmis dart dosyasini
+# etkilemedigi icin bridge yenilenmedi, damga guncellendi. Damga tum dosyayi
+# ozetliyor, yani bridge'i etkilemeyen degisiklikte de uyarir -- uyardiginda
+# once degisen satirin bridge'e mi JNI'ye mi ait oldugu bakilir.
+3defe618faa544f6c415cef5c723074e25b7ca5b3daa13fd32dcf930be7cfdfd

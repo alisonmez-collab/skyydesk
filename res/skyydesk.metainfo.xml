@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.elpo.SkyyDesk</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <name>SkyyDesk</name>
+  <summary>Uzaktan erisim ve destek</summary>
+  <developer_name>ELPO Bilisim</developer_name>
+  <description>
+    <p>
+      SkyyDesk ile uzaktaki bilgisayarlara guvenle baglanin, ekran paylasin
+      ve dosya aktarin. Yardim vermek ya da kendi bilgisayarinizi uzaktan
+      kullanmak icin tasarlandi.
+    </p>
+    <p>Ozellikler:</p>
+    <ul>
+      <li>Uzak masaustu kontrolu ve izleme</li>
+      <li>Iki yonlu dosya aktarimi</li>
+      <li>Adres defteri ve gruplar</li>
+      <li>Uctan uca sifreli baglanti</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">skyydesk.desktop</launchable>
+  <url type="homepage">https://elpodesk.com</url>
+  <categories>
+    <category>Network</category>
+    <category>RemoteAccess</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+</component>

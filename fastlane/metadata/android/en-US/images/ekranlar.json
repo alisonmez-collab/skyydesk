@@ -1,0 +1,10 @@
+[
+  {"kare":"oturum.png",           "ustyazi":"Remote desktop", "baslik":"Reach your office computer from your phone"},
+  {"kare":"arac-cubugu.png",      "ustyazi":"Control",        "baslik":"Mouse, keyboard, files and clipboard in one session"},
+  {"kare":"oturum-menu.png",      "ustyazi":"In session",     "baslik":"Request elevation, restart the far machine"},
+  {"kare":"dosya.png",            "ustyazi":"File transfer",  "baslik":"The far machine's disk, on your phone"},
+  {"kare":"izinler.png",          "ustyazi":"Privacy",        "baslik":"Permissions start off. You turn them on"},
+  {"kare":"ayarlar.png",          "ustyazi":"Your own server","baslik":"The ID and relay address stay yours"},
+  {"kare":"ayarlar-dil.png",      "ustyazi":"The app",        "baslik":"The language, the theme and the codec are your choice"},
+  {"kare":"ayarlar-guvenlik.png", "ustyazi":"Security",       "baslik":"Two factor authentication and IP whitelisting"}
+]

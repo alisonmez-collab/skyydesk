@@ -1,0 +1,36 @@
+SkyyDesk bir uzaktan masaüstü ve uzaktan destek uygulamasıdır. Bilgisayara nerede olursa olsun bağlanır, karşısında oturuyormuş gibi kullanırsınız — ekranı görür, fareyi oynatır, yazar, dosya aktarırsınız.
+
+UZAKTAN BAĞLANTI VE UZAKTAN ERİŞİM
+• Windows, Linux, macOS ve Android'e uzaktan bağlanma
+• Çift yönlü ekran paylaşımı
+• Karşı makinede tam fare ve klavye kontrolü
+• Telefondan bilgisayara, bilgisayardan telefona bağlanma
+
+BİLGİ İŞLEM EKİPLERİ İÇİN UZAKTAN DESTEK
+• Yerinde gitmeden kullanıcıya ya da müşteriye destek verme
+• Yönettiğiniz makinelere gözetimsiz erişim
+• Gruplu adres defteri — teknisyen yalnız kendi cihazlarını görür
+• Çift yönlü dosya transferi ve pano paylaşımı
+
+BAŞKA ARAÇLARIN ÇALIŞMADIĞI YERDE ÇALIŞIR
+• NAT arkasında, kurumsal güvenlik duvarı ardında, mobil veride
+• Port yönlendirme yok, VPN yok, modem ayarı yok
+• Doğrudan yol kapalıysa buluşma ve aktarma sunucusu üzerinden bağlanır
+
+GÜVENLİK
+• Oturumlar uçtan uca şifrelidir
+• Ekran görüntüsü, ses ve dosyalar sunucuda saklanmaz
+• Sunucular kiralık bulutta değil, ELPO'nun kendi veri merkezindedir
+• İsterseniz uygulamayı kendi sunucunuza yönlendirebilirsiniz
+
+ANDROID CİHAZI KONTROL ETME
+Uzaktaki bir bilgisayarın bu cihazı fare veya dokunmayla kullanabilmesi için SkyyDesk'in Erişilebilirlik hizmetine ihtiyacı var. Android'de girdi göndermenin başka yolu yok. İzin başka hiçbir şey için kullanılmaz ve yalnız oturum açıkken çalışır.
+
+NEREDE KULLANILIR
+Uzaktan teknik destek · yardım masası ve BT servis masası · sunucu ve kiosk yönetimi · evden ofis bilgisayarına ulaşma · ekranınızı bir arkadaşınıza gösterme · başka makinede unuttuğunuz dosyayı alma
+
+Windows, Linux ve macOS uygulamaları: https://skyydesk.com
+Gizlilik politikası: https://skyydesk.com/gizlilik/
+Hesap silme: https://skyydesk.com/hesap-silme/
+
+SkyyDesk, ELPO Bilişim tarafından AGPL-3.0 lisanslı RustDesk projesi üzerine geliştirilmiştir. Kaynak ve lisans: https://skyydesk.com/lisans

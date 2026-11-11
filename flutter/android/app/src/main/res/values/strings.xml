@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">SkyyDesk</string>
+    <string name="accessibility_service_description">Allow other devices to control your phone using virtual touch, when SkyyDesk screen sharing is established</string>
+    <string name="input_service_name">SkyyDesk Input</string>
+</resources>

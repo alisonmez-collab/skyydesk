@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -e
+
+case $1 in
+    install|upgrade)
+		INITSYS=$(ls -al /proc/1/exe | awk '{print $NF}' | awk -F'/' '{print $NF}')
+		if [ "systemd" == "${INITSYS}" ]; then
+			# Onceki surumler (elpodesk / rustdesk) calisiyorsa durdur, yoksa
+			# dosya kilitleri yuzunden kurulum yarida kaliyor.
+			for svc in skyydesk elpodesk rustdesk; do
+				systemctl stop "$svc" >/dev/null 2>&1 || true
+				systemctl disable "$svc" >/dev/null 2>&1 || true
+			done
+			pkill -f 'elpodesk --' >/dev/null 2>&1 || true
+			pkill -f 'skyydesk --' >/dev/null 2>&1 || true
+			sleep 1
+			rm -f /usr/bin/libsciter-gtk.so || true
+		fi
+		;;
+esac
+
+exit 0

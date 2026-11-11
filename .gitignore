@@ -1,0 +1,108 @@
+/build
+/target
+.vscode
+.idea
+.DS_Store
+.env
+libsciter-gtk.so
+src/ui/inline.rs
+extractor
+__pycache__
+*dmg
+*exe
+*tgz
+cert.pfx
+*.bak
+*png
+*svg
+*jpg
+sciter.dll
+**pdb
+*deb
+rustdesk
+*.cache
+# appimage
+appimage/AppDir
+appimage/*.AppImage
+appimage/appimage-build
+appimage/*.xz
+# flutter
+flutter/linux/build/**
+flutter/linux/cmake-build-debug/**
+# flatpak
+flatpak/.flatpak-builder/**
+flatpak/ccache/**
+flatpak/.flatpak-builder/build/**
+flatpak/.flatpak-builder/shared-modules/**
+flatpak/.flatpak-builder/shared-modules/*.tar.xz
+flatpak/.flatpak-builder/debian-binary
+flatpak/build/**
+flatpak/repo/**
+flatpak/*.flatpak
+# bridge file
+lib/generated_bridge.dart
+# vscode devcontainer
+.gitconfig
+.vscode-server/
+.ssh
+.devcontainer/.*
+# build cache in examples
+examples/**/target/
+# ===
+vcpkg_installed
+flutter/lib/generated_plugin_registrant.dart
+libsciter.dylib
+flutter/web/
+# Uretilmis bridge dosyalari BILEREK depoda tutuluyor (eskiden burada
+# yok sayiliyordu). Ureten arac GitHub'dan indiriliyor; depoda olmazlarsa
+# temiz bir klon internet olmadan derlenemez. Eskime tehlikesini
+# tools/bridge.stamp + derleme kapisi karsiliyor.
+# ============================================================
+# SkyDesk fork eklemeleri
+# ============================================================
+# Upstream'in *png / *svg / *jpg kurali marka varliklarimizi da eliyordu;
+# ikon ve logolar bu forkun ta kendisi, versiyonlanmalari sart.
+
+# derleme ciktilari ve ephemeral flutter dizinleri
+/target/
+/flutter/build/
+/flutter/windows/flutter/
+/flutter/linux/flutter/
+/logs/
+/skydesk
+
+# elle alinmis arsiv kopyalari (upstream *deb/*exe kaliplarina takilmayanlar)
+*.bak-*
+*.old-*
+
+# marka varliklari: upstream'in genel gorsel yasagindan muaf
+!res/**/*.png
+!res/**/*.svg
+!res/**/*.ico
+!res/**/*.jpg
+!flutter/assets/**
+!flutter/android/**/*.png
+!flutter/ios/**/*.png
+!flutter/macos/**/*.png
+!flutter/web/**/*.png
+
+# Derleme sirasinda uretilir, kaynak degil
+libs/portable/app_metadata.toml
+
+# --- Windows build kutusunda biriken artiklar ---
+/vcpkg/
+*.rustdesk-bak
+*.rd-bak
+res.bak-fd/
+*.msi
+*.wixpdb
+
+# Mağaza görselleri depoda durur; listelemeyi yükleyen kişi bunları depodan
+# alıyor. Yukarıdaki kök *png kuralı sessizce bunları da eliyordu — ikon ile
+# öne çıkan görsel bir süre "hazır" sanıldı, oysa hiç commit edilmemişlerdi.
+!fastlane/metadata/**/*.png
+
+# Derleme ciktilari: agacta durmalari pariteyi bozuk gosteriyordu ve
+# ikisi emekli marka adiyla duruyordu (FixDesk, tek y SkyDesk).
+*.apk
+*.aab

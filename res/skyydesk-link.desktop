@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=SkyyDesk
+NoDisplay=true
+MimeType=x-scheme-handler/skyydesk;
+TryExec=skyydesk
+Exec=skyydesk %u
+Icon=skyydesk
+Terminal=false
+Type=Application
+StartupNotify=false
+StartupWMClass=skyydesk

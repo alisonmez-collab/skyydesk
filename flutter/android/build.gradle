@@ -1,0 +1,50 @@
+allprojects {
+    repositories {
+        google()
+        maven { url 'https://jitpack.io' }
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+// AGP 8, her Android modulunun namespace bildirmesini istiyor. pub.dev'deki bazi
+// eklentiler (external_path gibi) hala eski package= yontemini kullaniyor ve
+// namespace tanimlamiyor; AGP 8'e cikilinca yapilandirmada dusuyorlar. Eksik olana
+// kendi grup adini veriyoruz -- eski package= ile ayni deger, davranis degismiyor.
+//
+// SIRA ONEMLI: asagidaki evaluationDependsOn(':app') alt projeleri erkenden
+// degerlendiriyor; bu blok ondan SONRA gelirse "already evaluated" hatasi veriyor.
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("android")) {
+            project.android {
+                if (namespace == null) {
+                    namespace project.group.toString()
+                }
+                // AGP 8 Java'yi 1.8'de birakip Kotlin'i 17'ye cekiyor ve eski
+                // eklentiler "Inconsistent JVM-target" ile duruyor. Ikisini de 17'ye
+                // sabitliyoruz; JDK 17 zaten AGP 8'in asgari surumu.
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+            // Kotlin gorevlerinde jvmTarget: sinifi dogrudan referans vermiyoruz,
+            // kotlin eklentisi uygulanmamis modullerde patlamasin diye ozellikten
+            // bakiyoruz.
+            project.tasks.matching { it.hasProperty("kotlinOptions") }.configureEach {
+                it.kotlinOptions.jvmTarget = "17"
+            }
+        }
+    }
+}
+
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}

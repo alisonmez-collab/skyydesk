@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Bos birakildi, kasitli.
+
+  Kaldirilan iki entitlement ve nedenleri:
+
+  aps-environment = development
+      Uygulamada push bildirim kodu yok (AppDelegate.swift bos, hicbir yerde
+      registerForRemoteNotifications cagrisi yok). Ustelik "development"
+      degeriyle App Store yuklemesi reddediliyor. Push eklendiginde geri
+      konur ve dagitim yapilandirmasinda "production" olur.
+
+  com.apple.developer.networking.wifi-info
+      Bagli agin SSID'sini okumak icin. Kodda karsiligi yok (ne Swift ne Rust
+      tarafinda CNCopyCurrentNetworkInfo cagrisi var). Kullanilmayan entitlement
+      zararsiz degil: App ID uzerinde ayni yetenek acik degilse profil uretimi
+      basarisiz oluyor.
+
+  Dosya duruyor cunku project.pbxproj CODE_SIGN_ENTITLEMENTS ile buraya isaret
+  ediyor; yeni bir entitlement gerektiginde eklenecek yer burasi.
+-->
+<plist version="1.0">
+<dict/>
+</plist>

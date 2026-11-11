@@ -1,0 +1,36 @@
+SkyyDesk is remote desktop and remote support software. Connect to a computer wherever it is and use it as if you were sitting in front of it — see the screen, move the mouse, type, transfer files.
+
+REMOTE DESKTOP AND REMOTE ACCESS
+• Remote control of Windows, Linux, macOS and Android
+• Screen sharing in both directions
+• Full mouse and keyboard control of the remote machine
+• Connect from your phone to a PC, or from a PC to your phone
+
+REMOTE SUPPORT FOR IT TEAMS
+• Help a colleague or a customer without travelling
+• Unattended access for machines you manage
+• Address book with groups, so a technician sees only their own devices
+• Two-way file transfer and shared clipboard
+
+WORKS WHERE OTHER TOOLS DO NOT
+• Behind NAT, behind a corporate firewall, on mobile data
+• No port forwarding, no VPN, no router configuration
+• Connects through a rendezvous and relay server when a direct path is blocked
+
+SECURITY
+• Sessions are end-to-end encrypted
+• Screen images, audio and files are never stored on the server
+• Servers run in ELPO's own data centre, not on rented cloud
+• You can point the app at your own server instead
+
+CONTROLLING AN ANDROID DEVICE
+To let a remote computer control this device with mouse or touch, SkyyDesk needs the Accessibility service. Android offers no other way to inject input. The permission is used for nothing else and only while a session is open.
+
+TYPICAL USES
+Remote technical support · helpdesk and IT service desk · managing servers and kiosks · reaching your office computer from home · showing a colleague what is on your screen · retrieving a file you left on another machine
+
+Desktop apps for Windows, Linux and macOS: https://skyydesk.com
+Privacy policy: https://skyydesk.com/gizlilik/
+Account deletion: https://skyydesk.com/hesap-silme/
+
+SkyyDesk is built by ELPO Bilisim on the AGPL-3.0 licensed RustDesk project. Source and licence: https://skyydesk.com/lisans

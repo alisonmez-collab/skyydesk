@@ -1,0 +1,394 @@
+# SkyyDesk iOS -> TestFlight, Codemagic uzerinde.
+#
+# Mac olmadan iOS yayininin yolu bu. AX_Automation_Mobil ile ayni duzen:
+# imzalama Codemagic'teki App Store Connect API anahtariyla (ELPO_ASC_KEY)
+# otomatik, sertifika/profil depoda durmuyor.
+#
+# O projeden farki: Flutter'dan once Rust cekirdegi (liblibskyydesk.a) iOS icin
+# derleniyor. Adimlar .github/workflows/flutter-build.yml > build-rustdesk-ios
+# ve bridge.yml ile ayni; GitHub kullanilmadigi icin buraya tasindi.
+# Ilk derleme uzun (vcpkg ffmpeg/libvpx/aom'u kaynaktan kuruyor, ~45 dk);
+# sonrakilerde vcpkg ikili onbellegi sayesinde kisaliyor.
+workflows:
+  ios-appstore:
+    name: SkyyDesk iOS App Store
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      # Codemagic > Teams > Integrations > App Store Connect'teki anahtarin ADI
+      app_store_connect: ELPO_ASC_KEY
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.elpo.skyydesk
+      # Android ile ayni surum (ANDROID_FLUTTER_VERSION). 3.24.5 guncel Xcode'un
+      # iOS SDK'siyla derlenmiyor; App Store da guncel SDK istiyor.
+      flutter: 3.44.0
+      xcode: latest
+      cocoapods: default
+      vars:
+        RUST_VERSION: "1.75"
+        VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+        FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+        CARGO_EXPAND_VERSION: "1.0.95"
+    cache:
+      cache_paths:
+        - $HOME/.cache/vcpkg/archives
+        - $HOME/.cargo/registry
+    scripts:
+      - name: Araclar (nasm, yasm, GNU sed)
+        script: |
+          brew install nasm yasm gnu-sed
+          # Flutter 3.44 yamasi GNU sed sozdizimiyle yazili; macOS'un sed'i
+          # "-i" ve cok satirli degistirmede farkli davraniyor.
+          echo "PATH=$(brew --prefix gnu-sed)/libexec/gnubin:$HOME/.cargo/bin:$PATH" >> $CM_ENV
+
+      - name: Rust toolchain
+        script: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --default-toolchain none --profile minimal --no-modify-path
+          fi
+          rustup toolchain install "$RUST_VERSION" --profile minimal \
+            --component rustfmt --target aarch64-apple-ios
+          rustup default "$RUST_VERSION"
+          rustc --version
+
+      - name: vcpkg bagimliliklari (arm64-ios)
+        script: |
+          VCPKG_ROOT=$HOME/vcpkg
+          git clone -q https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout -q "$VCPKG_COMMIT_ID"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          echo "VCPKG_ROOT=$VCPKG_ROOT" >> $CM_ENV
+          if ! "$VCPKG_ROOT/vcpkg" install --triplet arm64-ios \
+               --x-install-root="$VCPKG_ROOT/installed"; then
+            find "$VCPKG_ROOT/buildtrees" -name "*.log" -newer "$VCPKG_ROOT/vcpkg" \
+              -exec sh -c 'echo "== $1"; tail -50 "$1"' _ {} \;
+            exit 1
+          fi
+          # Kutuphaneler gercekten iOS icin mi? LC_BUILD_VERSION platform 2 = iOS,
+          # 1 = macOS. Xcode 26'da yanlis platform sessizce uretilebiliyor ve
+          # hata ancak 15 dk sonra Rust baglayicisinda cikiyordu. Surum bilgisi
+          # tasimayan nesneler (el yazimi assembly) sayilmiyor.
+          bad=0
+          for f in "$VCPKG_ROOT"/installed/arm64-ios/lib/*.a; do
+            p=$(otool -l "$f" | awk '/LC_BUILD_VERSION/{f=1} f&&/platform/{print $2; f=0}' | sort -u | tr '\n' ' ')
+            echo "$(basename "$f"): platform ${p:-?}"
+            case " $p" in *" 1 "*|*MACOS*) bad=1 ;; esac
+          done
+          [ $bad = 0 ] || { echo "macOS nesnesi iceren kutuphane var (iOS = platform 2)"; exit 1; }
+
+      - name: Flutter 3.44 kaynak yamasi
+        script: |
+          bash .github/patches/apply_flutter_3.44_source_patches.sh
+          # Flutter 3.44 iOS eklentilerini varsayilan olarak Swift Package
+          # Manager'la baglamaya calisiyor. Eklentilerimizin yarisi SPM'i
+          # desteklemiyor; karisik kurulumda file_picker'in CocoaPods
+          # bagimliligi (DKImagePickerController) baglayicida bulunamadi.
+          # Hepsi CocoaPods'tan gelsin.
+          flutter config --no-enable-swift-package-manager
+          cd flutter && flutter pub get
+
+      - name: flutter_rust_bridge kodu
+        script: |
+          cargo install cargo-expand --version "$CARGO_EXPAND_VERSION" --locked
+          cargo install flutter_rust_bridge_codegen --version "$FLUTTER_RUST_BRIDGE_VERSION" \
+            --features uuid --locked
+          flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+
+      - name: Rust cekirdegi (liblibskyydesk.a)
+        script: |
+          cargo build --locked --features flutter,hwcodec --release \
+            --target aarch64-apple-ios --lib
+          ls -lh target/aarch64-apple-ios/release/liblibskyydesk.a
+
+      - name: CocoaPods
+        script: |
+          cd flutter/ios && pod install
+          # file_picker'in bagimliliklari Podfile.lock'ta gizlilik bildirimi
+          # (PrivacyInfo.xcprivacy) olmayan eski surumlere kilitli; App Store
+          # ITMS-91061 ile reddetti. Bildirimli ilk surumler: DKImagePickerController
+          # 4.3.9, DKPhotoGallery 0.0.19, SwiftyGif 5.4.5. Windows'ta pod
+          # calismadigi icin kilit burada guncelleniyor.
+          pod update DKImagePickerController DKPhotoGallery SwiftyGif
+          grep -E "^  - (DKImagePickerController|DKPhotoGallery|SwiftyGif) \(" Podfile.lock
+          # Uygulamaya giren her framework'un bildirimi var mi? Eksik olan
+          # yuklemede degil incelemede cikiyor, o yuzden burada listelensin.
+          for p in DKImagePickerController DKPhotoGallery SwiftyGif device_info_plus package_info_plus wakelock_plus; do
+            # -L: Flutter eklentileri .symlinks altinda kisayol, find varsayilanda icine girmiyor
+            if find -L Pods .symlinks/plugins/$p -name PrivacyInfo.xcprivacy 2>/dev/null | grep -qi "$p"; then
+              echo "$p: PrivacyInfo var"
+            else
+              echo "UYARI $p: PrivacyInfo bulunamadi"
+            fi
+          done
+
+      - name: Imzalama profilleri (ASC anahtariyla otomatik)
+        script: xcode-project use-profiles
+
+      - name: IPA
+        script: |
+          cd flutter
+          # Surum pubspec'ten (1.4.9), build numarasi Codemagic'in proje
+          # sayacindan: TestFlight ayni surumde ayni numarayi ikinci kez
+          # kabul etmiyor ve oncekinden buyuk istiyor. Ilk yuklemeler pubspec'teki
+          # +68 ile gitti; +100 onlarin ustunde kalsin diye.
+          flutter build ipa --release \
+            --build-number=$((100 + PROJECT_BUILD_NUMBER)) \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - flutter/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Derleme TestFlight'a gider; App Store'a gonderimi App Store Connect'ten
+        # elle yapin.
+        submit_to_testflight: true
+        submit_to_app_store: false
+
+  # macOS: Mac App Store degil (sandbox'la uzak masaustu olmaz), siteden
+  # dagitilan Developer ID imzali ve Apple'a onaylatilmis (notarize) DMG.
+  # Adimlar .github/workflows/flutter-build.yml > build-for-macOS (aarch64)
+  # ile ayni. Yalniz Apple Silicon; Intel Mac icin x64-osx ayrica derlenmeli.
+  #
+  # Gereken "skyydesk_macos" degisken grubu, hepsi Secret. Kisisel hesapta
+  # global degisken artik eklenemiyor; grup uygulamanin kendi ayarlarinda
+  # (SkyyDesk > Environment variables). .p12 ve parolasi E:\Keys'te:
+  #   MACOS_CERT_P12_BASE64  Developer ID Application sertifikasi (.p12, base64)
+  #   MACOS_CERT_PASSWORD    .p12 parolasi
+  #   APPLE_ID               notarize icin Apple hesabi (e-posta)
+  #   APPLE_APP_PASSWORD     o hesabin uygulamaya ozel parolasi
+  #   APPLE_TEAM_ID          10 karakterlik Team ID
+  macos-dmg:
+    name: SkyyDesk macOS DMG
+    # Derleme+imza ~20 dk (vcpkg onbellekliyken). Notarize burada degil.
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - skyydesk_macos
+      flutter: 3.44.0
+      xcode: latest
+      cocoapods: default
+      vars:
+        RUST_VERSION: "1.81"          # MAC_RUST_VERSION: cidre 1.81 istiyor
+        VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+        FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+        CARGO_EXPAND_VERSION: "1.0.95"
+        MIN_MACOS: "12.3"             # ScreenCaptureKit'in en dusugu
+    cache:
+      cache_paths:
+        - $HOME/.cache/vcpkg/archives
+        - $HOME/.cargo/registry
+    scripts:
+      - name: Araclar (nasm, yasm, GNU sed)
+        script: |
+          brew install nasm yasm gnu-sed
+          echo "PATH=$(brew --prefix gnu-sed)/libexec/gnubin:$HOME/.cargo/bin:$PATH" >> $CM_ENV
+
+      - name: Rust toolchain
+        script: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --default-toolchain none --profile minimal --no-modify-path
+          fi
+          rustup toolchain install "$RUST_VERSION" --profile minimal \
+            --component rustfmt --target aarch64-apple-darwin
+          rustup default "$RUST_VERSION"
+          rustc --version
+
+      - name: vcpkg bagimliliklari (arm64-osx)
+        script: |
+          VCPKG_ROOT=$HOME/vcpkg
+          git clone -q https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout -q "$VCPKG_COMMIT_ID"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          echo "VCPKG_ROOT=$VCPKG_ROOT" >> $CM_ENV
+          if ! "$VCPKG_ROOT/vcpkg" install --triplet arm64-osx \
+               --x-install-root="$VCPKG_ROOT/installed"; then
+            find "$VCPKG_ROOT/buildtrees" -name "*.log" -newer "$VCPKG_ROOT/vcpkg" \
+              -exec sh -c 'echo "== $1"; tail -50 "$1"' _ {} \;
+            exit 1
+          fi
+          # Kutuphaneler hangi en dusuk macOS icin? MIN_MACOS'u gecmemeli;
+          # surum verilmezse derleme makinesinin macOS'una gore uretiliyor.
+          for f in "$VCPKG_ROOT"/installed/arm64-osx/lib/*.a; do
+            m=$(otool -l "$f" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; f=0}' | sort -u | tr '\n' ' ')
+            echo "$(basename "$f"): minos $m"
+          done
+
+      - name: Flutter 3.44 kaynak yamasi
+        script: |
+          bash .github/patches/apply_flutter_3.44_source_patches.sh
+          flutter config --no-enable-swift-package-manager
+          # https://github.com/flutter/flutter/issues/133533 (upstream CI'daki gibi)
+          B="$FLUTTER_ROOT/packages/flutter/lib/src/scheduler/binding.dart"
+          sed -i -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' "$B"
+          cd flutter && flutter pub get
+
+      - name: flutter_rust_bridge kodu
+        script: |
+          cargo install cargo-expand --version "$CARGO_EXPAND_VERSION" --locked
+          cargo install flutter_rust_bridge_codegen --version "$FLUTTER_RUST_BRIDGE_VERSION" \
+            --features uuid --locked
+          flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h
+
+      - name: Derleme (Rust + Flutter)
+        script: |
+          # set -e olmadan adim, build.py hata verse bile son komutun (ls)
+          # cikis koduyla "basarili" sayiliyordu: bos bir SkyyDesk.app
+          # imzalanip DMG'ye kondu (22.09.2026).
+          set -e
+          # Depodaki 10.14 degerleri Intel derlemesi icin; Apple Silicon +
+          # ScreenCaptureKit 12.3 istiyor (upstream CI ayni degisikligi yapiyor).
+          sed -i -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS}/" build.py
+          sed -i -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS}'/" flutter/macos/Podfile
+          sed -i -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS}\"/" Cargo.toml
+          sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS};/" flutter/macos/Runner.xcodeproj/project.pbxproj
+          python3 build.py --flutter --hwcodec --unix-file-copy-paste --screencapturekit
+          ls -la flutter/build/macos/Build/Products/Release/SkyyDesk.app/Contents/MacOS/
+
+      - name: Imza (Developer ID)
+        script: |
+          keychain initialize
+          echo "$MACOS_CERT_P12_BASE64" | base64 --decode > /tmp/devid.p12
+          keychain add-certificates --certificate /tmp/devid.p12 \
+            --certificate-password "$MACOS_CERT_PASSWORD"
+          rm -f /tmp/devid.p12
+          ID=$(security find-identity -v -p codesigning | awk -F'"' '/Developer ID Application/{print $2; exit}')
+          [ -n "$ID" ] || { echo "Developer ID Application sertifikasi bulunamadi"; exit 1; }
+          echo "SIGN_ID=$ID" >> $CM_ENV
+          APP=flutter/build/macos/Build/Products/Release/SkyyDesk.app
+          # Once icteki servis ikilisi, sonra paket. Paketin yetkileri (mikrofon,
+          # ag) Release.entitlements'tan; --force eskilerini sildigi icin acikca.
+          codesign --force --options runtime --timestamp -s "$ID" "$APP/Contents/MacOS/service"
+          codesign --force --deep --options runtime --timestamp \
+            --entitlements flutter/macos/Runner/Release.entitlements -s "$ID" "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: DMG
+        script: |
+          set -e
+          V=$(grep -m1 '^version:' flutter/pubspec.yaml | sed 's/version: *//; s/+.*//')
+          APP=flutter/build/macos/Build/Products/Release/SkyyDesk.app
+          # create-dmg simgeleri dizmek icin Finder'i AppleScript'le suruyor;
+          # ekransiz Codemagic makinesinde Finder cevap vermiyor (-1712) ve DMG
+          # hic olusmuyordu. hdiutil ayni icerigi (uygulama + Applications
+          # kisayolu) Finder'a dokunmadan uretiyor; yalniz pencere duzeni yok.
+          ROOT=$(mktemp -d)
+          cp -R "$APP" "$ROOT/"
+          ln -s /Applications "$ROOT/Applications"
+          mkdir -p dist
+          DMG="dist/SkyyDesk-${V}-macOS-arm64.dmg"
+          hdiutil create -volname "SkyyDesk" -srcfolder "$ROOT" -ov -format UDZO "$DMG"
+          codesign --force --timestamp -s "$SIGN_ID" "$DMG"
+          codesign --verify --verbose=2 "$DMG"
+          ls -lh "$DMG"
+          # Notarize BU IS AKISINDA YAPILMIYOR. Apple'in kuyrugu bir kez 1s 44dk
+          # surdu ve derleme sure sinirina takilip DMG'yi de goturdu. Onay ayri
+          # is akisinda: yapitin public download link'ini alip "notarize-dmg"yi
+          # DMG_URL ile calistirin.
+
+    artifacts:
+      - dist/*.dmg
+      - /tmp/xcodebuild_logs/*.log
+
+  # Notarize gecmisini ve son gonderimin raporunu getirir (2-3 dk).
+  # Uzun bekleyen bir gonderimi iptal ettikten sonra sonucu buradan ogrenin;
+  # numara Apple'in gecmisinde duruyor. Belirli bir gonderim icin derlemeyi
+  # baslatirken NOTARY_ID degiskenini ekleyin.
+  notary-log:
+    name: macOS notarize raporu
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - skyydesk_macos
+    scripts:
+      - name: notarytool history + log
+        script: |
+          set -e
+          NOTARY=(--apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID")
+          echo "== son gonderimler"
+          xcrun notarytool history "${NOTARY[@]}" | head -40
+          ID="${NOTARY_ID:-}"
+          if [ -z "$ID" ]; then
+            ID=$(xcrun notarytool history --output-format json "${NOTARY[@]}"                  | python3 -c 'import sys,json; h=json.load(sys.stdin)["history"]; print(h[0]["id"] if h else "")')
+          fi
+          [ -n "$ID" ] || { echo "gecmiste gonderim yok"; exit 1; }
+          echo "== $ID"
+          xcrun notarytool info "$ID" "${NOTARY[@]}"
+          xcrun notarytool log "$ID" "${NOTARY[@]}"
+
+  # Sure dolmasi ya da notarize reddi yuzunden yarim kalan bir DMG'yi bastan
+  # derlemeden onaylatir. Codemagic'te yapitin "public download link"ini alin,
+  # DMG_URL'e yazip calistirin.
+  notarize-dmg:
+    name: macOS DMG notarize (hazir dosya)
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - skyydesk_macos
+    scripts:
+      - name: Indir ve notarize et
+        script: |
+          set -e
+          # DMG_URL degiskeni yok: Codemagic bos varsayilana izin vermiyor.
+          # Derlemeyi baslatirken "Environment variables" bolumunden ekleyin
+          # (yapitin public download link'i).
+          [ -n "${DMG_URL:-}" ] || { echo "DMG_URL tanimli degil"; exit 1; }
+          mkdir -p dist && cd dist
+          curl -fL -o SkyyDesk-macOS-arm64.dmg "$DMG_URL"
+          DMG=SkyyDesk-macOS-arm64.dmg
+          codesign --verify --verbose=2 "$DMG"
+          NOTARY=(--apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID")
+          # --timeout: Apple takilirsa is akisi sure sinirina carpmadan bitsin;
+          # gonderim numarasi logda kalir, "notary-log" ile sonradan sorulur.
+          OUT=$(xcrun notarytool submit "$DMG" --wait --timeout 60m --output-format json "${NOTARY[@]}") || true
+          echo "$OUT"
+          NID=$(echo "$OUT" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+          ST=$(echo "$OUT" | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+          if [ "$ST" != "Accepted" ]; then
+            xcrun notarytool log "$NID" "${NOTARY[@]}"
+            exit 1
+          fi
+          xcrun stapler staple "$DMG"
+          spctl -a -t open --context context:primary-signature -v "$DMG"
+    artifacts:
+      - dist/*.dmg
+
+  # Onaylanmis (Accepted) bir DMG'ye bileti isler: boylece macOS internet
+  # olmadan da dogrulayabiliyor. Yeniden gonderim yok, dakikalar surer.
+  # Derlemeyi baslatirken DMG_URL degiskenini ekleyin.
+  staple-dmg:
+    name: macOS DMG bilet isleme (staple)
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      # DMG_URL bu grupta; grup yazilmayinca degisken is akisina gelmiyor.
+      groups:
+        - skyydesk_macos
+    scripts:
+      - name: Indir ve staple
+        script: |
+          set -e
+          [ -n "${DMG_URL:-}" ] || { echo "DMG_URL tanimli degil"; exit 1; }
+          mkdir -p dist && cd dist
+          DMG=SkyyDesk-macOS-arm64.dmg
+          curl -fL -o "$DMG" "$DMG_URL"
+          codesign --verify --verbose=2 "$DMG"
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+          spctl -a -t open --context context:primary-signature -v "$DMG"
+          ls -lh "$DMG"
+    artifacts:
+      - dist/*.dmg

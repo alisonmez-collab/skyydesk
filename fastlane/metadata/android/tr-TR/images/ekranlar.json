@@ -1,0 +1,10 @@
+[
+  {"kare":"oturum.png",           "ustyazi":"Uzak masaüstü",   "baslik":"Ofisteki bilgisayarına telefondan bağlan"},
+  {"kare":"arac-cubugu.png",      "ustyazi":"Denetim",         "baslik":"Fare, klavye, dosya ve pano aynı oturumda"},
+  {"kare":"oturum-menu.png",      "ustyazi":"Oturumda",        "baslik":"Yönetici yetkisi iste, uzaktan yeniden başlat"},
+  {"kare":"dosya.png",            "ustyazi":"Dosya aktarımı",  "baslik":"Karşı makinenin diski telefonunda"},
+  {"kare":"izinler.png",          "ustyazi":"Gizlilik",        "baslik":"İzinler kapalı gelir, açan sensin"},
+  {"kare":"ayarlar.png",          "ustyazi":"Kendi sunucun",   "baslik":"Kimlik ve relay adresi senin elinde"},
+  {"kare":"ayarlar-dil.png",      "ustyazi":"Uygulama",        "baslik":"Dili, teması ve kodeği senin tercihin"},
+  {"kare":"ayarlar-guvenlik.png", "ustyazi":"Güvenlik",        "baslik":"İki adımlı doğrulama ve IP beyaz listesi"}
+]

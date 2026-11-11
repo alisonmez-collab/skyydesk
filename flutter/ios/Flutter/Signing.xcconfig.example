@@ -1,0 +1,23 @@
+// SkyyDesk iOS imzalama ayarlari.
+//
+// Bu dosyayi "Signing.xcconfig" adiyla kopyalayip kendi Apple Team ID'nizi yazin:
+//
+//     cp flutter/ios/Flutter/Signing.xcconfig.example flutter/ios/Flutter/Signing.xcconfig
+//
+// Gercek dosya .gitignore'da. Ekip kimligi depoya girmez; her gelistirici ve CI
+// kendi hesabini kullanir. Android tarafindaki key.properties ile ayni duzen.
+//
+// Daha once ekip kimligi dogrudan project.pbxproj icinde duruyordu ve orada
+// RustDesk'in kimligi (HZF9JMC8YN) yaziliydi. Uc build yapilandirmasindan da
+// kaldirildi; deger artik yalnizca buradan geliyor.
+
+// Apple Developer hesabinizin 10 karakterlik Team ID'si.
+// developer.apple.com > Account > Membership Details > Team ID
+// Bos birakilirsa Xcode "Signing for Runner requires a development team" ile durur.
+DEVELOPMENT_TEAM = XXXXXXXXXX
+
+// Otomatik imzalama: profili Xcode uretir ve arsivlerken dagitim sertifikasina
+// kendisi gecer, boylece App Store yuklemesi icin ayrica profil adi tutmak
+// gerekmez. Profilleri elle yonetmek isterseniz Manual yapip
+// PROVISIONING_PROFILE_SPECIFIER satirini ekleyin.
+CODE_SIGN_STYLE = Automatic

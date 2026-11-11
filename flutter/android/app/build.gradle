@@ -1,0 +1,168 @@
+import com.google.protobuf.gradle.*
+import groovy.json.JsonSlurper
+
+plugins {
+    id "com.google.protobuf" version "0.9.4"
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+// Add rustls-platform-verifier Android support
+String findRustlsPlatformVerifierMavenDir() {
+    def dependencyText = providers.exec {
+        it.workingDir = new File("../..")
+        commandLine("cargo", "metadata", "--format-version", "1")
+    }.standardOutput.asText.get()
+
+    def dependencyJson = new JsonSlurper().parseText(dependencyText)
+    def pkg = dependencyJson.packages.find { it.name == "rustls-platform-verifier-android" }
+    
+    if (pkg == null) {
+        throw new GradleException("rustls-platform-verifier-android package not found in cargo metadata!")
+    }
+    
+    def manifestPath = file(pkg.manifest_path)
+    def mavenDir = new File(manifestPath.parentFile, "maven")
+    
+    if (!mavenDir.exists()) {
+        throw new GradleException("Maven directory not found at: ${mavenDir.path}")
+    }
+    
+    println("✓ Found rustls-platform-verifier maven repo at: ${mavenDir.path}")
+    return mavenDir.path
+}
+
+
+repositories {
+    maven {
+        url = findRustlsPlatformVerifierMavenDir()
+        metadataSources.artifact()
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.20.1'
+    }
+
+    generateProtoTasks {
+        all().configureEach { task ->
+            task.builtins {
+                java {
+                    option "lite"
+                }
+            }
+        }
+    }
+}
+
+android {
+    namespace 'com.elpo.skyydesk'
+    // API 36: Play, 31.08.2026'dan beri yeni uygulama ve guncellemelerde Android 16
+    // istiyor (uzatma hakki 01.11.2026'da bitiyor). API 36 icin AGP >= 8.10 sart;
+    // 8.9 API 35'te tavan yapiyor.
+    compileSdkVersion 36
+    // CI'daki NDK_VERSION (r28c) ile ayni olmali. Pinlenmesinin sebebi 16 KB sayfa
+    // boyutu: Play, 01.11.2025'ten beri Android 15+ hedefleyen yuklemelerde bunu
+    // zorunlu tutuyor ve .so'lari 16 KB hizali ureten ilk NDK r28. Pin olmadan
+    // yerel build makinedeki rastgele NDK'yi secip hizasiz kutuphane paketliyor.
+    // Surum dizesi degisirse hata net: "NDK not found at .../ndk/28.2.13676358".
+    ndkVersion '28.2.13676358'
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+
+        main.proto.srcDirs += '../../../libs/hbb_common/protos'
+        main.proto.includes += "message.proto"
+    }
+
+    compileOptions {
+        // JDK 17: AGP 8'in asgarisi. 1.8'de birakilirsa Kotlin 17'ye ciktigi icin
+        // "Inconsistent JVM-target" ile duruyor.
+        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_17
+        // qr_code_scanner eski API seviyelerinde java.time gibi siniflari kullaniyor
+        // ve AGP 8 bunu desugaring acik degilse reddediyor (checkReleaseAarMetadata).
+        coreLibraryDesugaringEnabled true
+    }
+
+    // compileOptions'taki 17 yalniz Java tarafini baglar. Kotlin kendi jvmTarget'ini
+    // calistigi JDK'dan turetiyor, yani makineye gore 17 disina kayabiliyor ve build
+    // "Inconsistent JVM-target compatibility" ile duruyor. Acikca yazilmasi bu
+    // sapmayi kapatiyor.
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId "com.elpo.skyydesk"
+        // 22 idi. Flutter 3.38+ minSdk 23'un altini derlemiyor (DependencyVersionChecker
+        // errorMinSdkVersion=23) ve "flutter build" hardcoded 16-23 araligini kendiliginden
+        // flutter.minSdkVersion'a cevirdi. API 36'ya cikmak Flutter'i yukseltmeyi zorunlu
+        // kildigi icin bunun kacisi yok: Android 5.0/5.1 destegi dusuyor.
+        // flutter.minSdkVersion yerine acik deger: yayindaki bir uygulamanin minSdk'si
+        // arac guncellemesiyle sessizce kaymamali, Play'deki cihaz sayisini dogrudan
+        // etkiliyor. Flutter tabani yukselirse build acik bir hatayla durur.
+        minSdkVersion 24
+        targetSdkVersion 36
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
+
+    signingConfigs {
+      release {
+        keyAlias keystoreProperties['keyAlias']
+        keyPassword keystoreProperties['keyPassword']
+        storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+        storePassword keystoreProperties['storePassword']
+      }
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules'
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.2'
+    implementation 'com.google.protobuf:protobuf-javalite:3.20.1'
+    implementation "androidx.media:media:1.6.0"
+    implementation 'com.github.getActivity:XXPermissions:18.5'
+    implementation("org.jetbrains.kotlin:kotlin-stdlib") { version { strictly("1.9.10") } }
+    implementation 'com.caverock:androidsvg-aar:1.4'
+    implementation "rustls:rustls-platform-verifier:0.1.1"
+}

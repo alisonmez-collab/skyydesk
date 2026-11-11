@@ -1,0 +1,8 @@
+[
+  {"kare":"oturum.png",      "ustyazi":"Uzak masaüstü",  "baslik":"Ofisteki bilgisayarına iPhone'dan bağlan"},
+  {"kare":"arac-cubugu.png", "ustyazi":"Denetim",        "baslik":"Fare, klavye ve dosya aynı oturumda"},
+  {"kare":"dokunmatik.png",  "ustyazi":"Dokunmatik",     "baslik":"Parmağın fare olur: tıkla, sürükle, yakınlaştır"},
+  {"kare":"kalite.png",      "ustyazi":"Görüntü",        "baslik":"Kaliteyi ve kodeği bağlantına göre seç"},
+  {"kare":"baglanti.png",    "ustyazi":"Hızlı bağlantı", "baslik":"Kimliği yaz, parolayı gir, bağlan"},
+  {"kare":"ayarlar.png",     "ustyazi":"Kendi sunucun",  "baslik":"Kimlik ve relay adresi senin elinde"}
+]

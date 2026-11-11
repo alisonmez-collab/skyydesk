@@ -1,0 +1,6 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
+#include "Generated.xcconfig"
+// Apple Team ID depoda tutulmuyor; bkz. Signing.xcconfig.example.
+// "#include?" olmasi onemli: dosya yoksa build kirilmaz, yalniz imzalama adiminda
+// eksik ekip kimligi hatasi verir.
+#include? "Signing.xcconfig"

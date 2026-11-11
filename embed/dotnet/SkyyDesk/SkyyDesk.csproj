@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Not SkyyDesk.dll: Windows file names ignore case, and the native library is skyydesk.dll. -->
+    <AssemblyName>SkyyDesk.Net</AssemblyName>
+    <RootNamespace>SkyyDesk</RootNamespace>
+    <PackageId>SkyyDesk</PackageId>
+    <Version>1.4.10</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>ELPO Bilişim</Authors>
+    <Description>Makes the machine your application runs on reachable from SkyyDesk.</Description>
+    <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
+    <PackageProjectUrl>https://skyydesk.com/gelistiriciler/</PackageProjectUrl>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="runtimes/**" Pack="true" PackagePath="runtimes/" Condition="Exists('runtimes')" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

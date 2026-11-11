@@ -1,0 +1,90 @@
+#!/bin/bash
+
+set -e
+
+if [ "$1" = configure ]; then
+
+	INITSYS=$(ls -al /proc/1/exe | awk '{print $NF}' | awk -F'/' '{print $NF}')
+	ln -f -s /usr/share/skyydesk/skyydesk /usr/bin/skyydesk
+
+	if [ "systemd" == "$INITSYS" ]; then
+		rm -f /etc/systemd/system/skyydesk.service \
+		      /usr/lib/systemd/system/skyydesk.service \
+		      /usr/lib/systemd/user/skyydesk.service 2>/dev/null || true
+		mkdir -p /usr/lib/systemd/system/
+		cp /usr/share/skyydesk/files/systemd/skyydesk.service /usr/lib/systemd/system/skyydesk.service
+		# Ubuntu 18.04: "Executable path is not absolute: pkill -f ..."
+		if [ -e /usr/bin/pkill ]; then
+			sed -i "s|pkill|/usr/bin/pkill|g" /usr/lib/systemd/system/skyydesk.service
+		fi
+		systemctl daemon-reload
+		systemctl enable skyydesk
+		systemctl start skyydesk
+		sleep 1
+	fi
+
+	update-desktop-database -q >/dev/null 2>&1 || true
+	gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+
+	# Oturum acmis kullanicilar icin masaustu kisayolu + uygulamayi baslat.
+	#
+	# `loginctl list-users --no-legend` iki alan verir: UID ve KULLANICI ADI.
+	# Burada yalnizca 2. alan okunuyordu ve XDG_RUNTIME_DIR=/run/user/<ad>
+	# kuruluyordu; oysa dogru yol /run/user/<uid>. O dizin bulunmadigi icin
+	# uygulama oturum veriyoluna baglanamiyor ve `2>/dev/null || true`
+	# yuzunden sessizce dusuyordu: kurulum "basarili" diyor, sonra hicbir sey
+	# olmuyordu. Iki alan da okunuyor; ad `su`/`chown` icin, sayi runtime
+	# dizini icin kullaniliyor.
+	while read -r UID_NUM UNAME _; do
+		[ -n "$UID_NUM" ] && [ -n "$UNAME" ] || continue
+		UHOME=$(getent passwd "$UNAME" | cut -d: -f6)
+		[ -d "$UHOME" ] || continue
+		for DESKDIR in "$UHOME/Masaüstü" "$UHOME/Desktop"; do
+			if [ -d "$DESKDIR" ]; then
+				cp -f /usr/share/applications/skyydesk.desktop "$DESKDIR/" 2>/dev/null || true
+				chown "$UNAME":"$UNAME" "$DESKDIR/skyydesk.desktop" 2>/dev/null || true
+				chmod +x "$DESKDIR/skyydesk.desktop" 2>/dev/null || true
+			fi
+		done
+		# `loginctl show-user -p Display` X ekranini degil, kullanicinin
+		# GORUNTULU OTURUM KIMLIGINI dondurur (or. "1523"). Buradan gelen deger
+		# dogrudan DISPLAY'e yaziliyordu; "DISPLAY=1523" gecersiz oldugu icin
+		# uygulama hicbir X sunucusuna baglanamayip sessizce oluyordu. Ekrani
+		# ogrenmek icin once oturum bulunur, sonra o oturuma sorulur.
+		SESS=$(loginctl show-user "$UNAME" -p Display 2>/dev/null | cut -d= -f2)
+		DISP=""
+		[ -n "$SESS" ] && DISP=$(loginctl show-session "$SESS" -p Display 2>/dev/null | cut -d= -f2)
+		# systemd bu alani her zaman doldurmuyor (x11 oturumunda bile bos
+		# olabiliyor), o yuzden X soketlerine bakiliyor.
+		case "$DISP" in
+			:*) ;;
+			*)
+				DISP=""
+				for sock in /tmp/.X11-unix/X*; do
+					[ -S "$sock" ] || continue
+					DISP=":${sock##*/X}"
+					break
+				done
+				[ -n "$DISP" ] || DISP=":0"
+				;;
+		esac
+		RUNDIR="/run/user/$UID_NUM"
+		[ -d "$RUNDIR" ] || RUNDIR=""
+		# Zaten acik bir ana pencere varsa ikincisini baslatma. Iki ornek ayni
+		# anda ekrani yakalamaya calisinca cogaltma tutamagi tek surece ait
+		# oldugu icin baglantiyi sunan ornek kare uretemiyor; ses paylasimli
+		# oldugundan calismaya devam ediyor ve "bagli ama ekran siyah" gibi
+		# gorunuyor. (Windows'ta ayni koruma core_main icinde.)
+		if pgrep -u "$UNAME" -x -f '/usr/bin/skyydesk' >/dev/null 2>&1 \
+			|| pgrep -u "$UNAME" -x -f '/usr/share/skyydesk/skyydesk' >/dev/null 2>&1; then
+			continue
+		fi
+		su "$UNAME" -s /bin/bash -c \
+			"DISPLAY=$DISP WAYLAND_DISPLAY=wayland-0 GDK_BACKEND=x11 ${RUNDIR:+XDG_RUNTIME_DIR=$RUNDIR} nohup /usr/bin/skyydesk >/dev/null 2>&1 &" \
+			2>/dev/null || true
+	done <<-EOF
+	$(loginctl list-users --no-legend 2>/dev/null)
+	EOF
+fi
+
+exit 0

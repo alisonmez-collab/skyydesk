@@ -1,0 +1,8 @@
+include("${CMAKE_CURRENT_LIST_DIR}/android-common.cmake")
+
+set(VCPKG_TARGET_ARCHITECTURE arm)
+set(VCPKG_MAKE_BUILD_TRIPLET "--host=armv7a-linux-androideabi")
+set(VCPKG_CMAKE_CONFIGURE_OPTIONS
+    -DANDROID_ABI=armeabi-v7a
+    -DANDROID_ARM_NEON=ON
+    "-DCMAKE_ASM_COMPILER=${SKYDESK_ANDROID_ASM}")

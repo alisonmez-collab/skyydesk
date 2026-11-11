@@ -1,0 +1,37 @@
+* text=auto
+
+# Linux'a giden her sey LF olmak zorunda. Bir bakim scripti CRLF ile paketlenirse
+# dpkg onu "bad interpreter" ile reddeder ve hata Windows tarafinda hic gorunmez.
+res/DEBIAN/* text eol=lf
+*.sh text eol=lf
+*.service text eol=lf
+*.desktop text eol=lf
+*.rules text eol=lf
+build.py text eol=lf
+
+# Yama dosyalari da LF. "git apply" CRLF'li bir yamayi "corrupt patch at line N"
+# ile reddediyor; vcpkg bagimliliklarinin (aom, ffmpeg, libvpx, libyuv, opus...)
+# hepsi bu yamalarla derleniyor, yani Windows'ta checkout edilmis bir agactan
+# Android/Linux derlemesi bastan mumkun degildi. CI Linux'ta checkout ettigi
+# icin LF aliyor ve sorunu hic gormuyor.
+*.diff text eol=lf
+*.patch text eol=lf
+
+# Marka gorselleri ikili — donusum uygulanmaz
+*.png binary
+*.ico binary
+*.gif binary
+*.jpg binary
+
+# Kurulum betigi CRLF kalmali: cmd, LF satir sonlu betikte "komut taninmadi"
+# verir ve guncelleme sessizce coker (13.08.2026, include_str! ile exe icine
+# gomulduğu icin depodaki satir sonu dogrudan urune gidiyor).
+res/SkyyDesk-Setup.cmd text eol=crlf
+
+# Windows'a giden toplu is dosyalari CRLF olmak zorunda. LF ile yazilinca
+# cmd.exe atladigi etiketi bulamiyor ("cannot find the batch label") ve
+# derleme paketleme adiminin hemen oncesinde duruyor -- 26.09.2026'da bir
+# marka duzeltmesi dosyayi LF'e cevirince tam bu yasandi.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Sablon. Gercek exportOptions.plist'i build_ios.sh uretiyor: __DEVELOPMENT_TEAM__
+  yerine Flutter/Signing.xcconfig icindeki Team ID yaziliyor. Ekip kimligi depoda
+  durmasin diye boyle.
+
+  Onceki dosya kivrik tirnak (") iceriyordu, yani gecerli XML degildi ve xcodebuild
+  onu hic parse edemiyordu. Ayrica teamID bostu ve provisioningProfiles altinda
+  RustDesk'in profil adi ("rustdesk-ios-prod-app-store") duruyordu. Profil adi
+  tamamen kalkti: signingStyle=automatic ile dogru dagitim profilini Xcode seciyor.
+-->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store</string>
+	<key>teamID</key>
+	<string>__DEVELOPMENT_TEAM__</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>stripSwiftSymbols</key>
+	<true/>
+</dict>
+</plist>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sistemin Erisilebilirlik ayarlarinda gosterdigi ad ve aciklama.
+     Uygulama ici aciklama kullaniciya "[SkyyDesk Girisi] hizmetini
+     etkinlestirin" diyor; bu dosya yokken Turkce sistem ayni hizmeti
+     "SkyyDesk Input" diye listeliyor, aciklamasini da Ingilizce gosteriyordu.
+     app_name bilerek yok: her dilde SkyyDesk. -->
+<resources>
+    <string name="input_service_name">SkyyDesk Girişi</string>
+    <string name="accessibility_service_description">SkyyDesk ekran paylaşımı kurulduğunda, diğer cihazların sanal dokunuşla telefonunuzu kontrol etmesine izin verir.</string>
+</resources>

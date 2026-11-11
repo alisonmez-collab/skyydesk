@@ -1,0 +1,32 @@
+aom 3.12.1, "cok gecisli optimizasyon destekleniyor mu" sorusunu `nasm -hf`
+ciktisinda "-Ox" arayarak yanitliyor. NASM 2.16'da `-hf` tum yardim metnini
+basiyordu, dolayisiyla "-Ox" orada goruluyordu. NASM 3.01'de `-hf` yalnizca
+obje formatlarini basiyor; optimizasyon bayraklari `-hO` altina tasindi.
+Sonuc: nasm dogru calistigi halde aom "Unsupported nasm" deyip yapilandirmayi
+dusuruyor. (Olculdu: 3.01 ile `-Ox -f win64` gercekten assemble ediyor.)
+
+Upstream aom bunu iki ayri sorguya bolerek duzeltti; buradaki yama o
+degisikligin 3.12.1'e geri tasinmis hali. vcpkg NASM'i kendisi indirdigi icin
+"eski nasm kur" bir cozum degil.
+
+--- a/build/cmake/aom_optimization.cmake
++++ b/build/cmake/aom_optimization.cmake
+@@ -212,7 +212,7 @@
+ # Currently checks only for presence of required object formats and support for
+ # the -Ox argument (multipass optimization).
+ function(test_nasm)
+-  execute_process(COMMAND ${CMAKE_ASM_NASM_COMPILER} -hf
++  execute_process(COMMAND ${CMAKE_ASM_NASM_COMPILER} -hO
+                   OUTPUT_VARIABLE nasm_helptext)
+
+   if(NOT "${nasm_helptext}" MATCHES "-Ox")
+@@ -220,6 +220,9 @@
+       FATAL_ERROR "Unsupported nasm: multipass optimization not supported.")
+   endif()
+
++  execute_process(COMMAND ${CMAKE_ASM_NASM_COMPILER} -hf
++                  OUTPUT_VARIABLE nasm_helptext)
++
+   if("${AOM_TARGET_CPU}" STREQUAL "x86")
+     if("${AOM_TARGET_SYSTEM}" STREQUAL "Darwin")
+       if(NOT "${nasm_helptext}" MATCHES "macho32")

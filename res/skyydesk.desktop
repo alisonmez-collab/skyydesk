@@ -1,0 +1,19 @@
+[Desktop Entry]
+Name=SkyyDesk
+GenericName=Uzak Masaustu
+Comment=Uzaktan erisim ve destek
+Exec=env GDK_BACKEND=x11 skyydesk %u
+Icon=skyydesk
+Terminal=false
+Type=Application
+StartupNotify=true
+Categories=Network;RemoteAccess;GTK;
+Keywords=uzak;destek;remote;desktop;rdp;vnc;elpo;skyydesk;
+Actions=new-window;
+StartupWMClass=skyydesk
+
+X-Desktop-File-Install-Version=0.23
+
+[Desktop Action new-window]
+Name=Yeni pencere ac
+Exec=env GDK_BACKEND=x11 skyydesk %u
