@@ -32,4 +32,12 @@ function  skyydesk_set_option(Key, Value: PAnsiChar): Integer; cdecl; external S
 
 implementation
 
+uses
+  Math;
+
+initialization
+  { The library's C and Rust code expects floating-point exceptions to be masked, as they are
+    in C. Delphi unmasks some of them, and a division that should give infinity then raises
+    EZeroDivide on a library thread and ends the program. Masked here, before any SkyyDesk call. }
+  SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
 end.

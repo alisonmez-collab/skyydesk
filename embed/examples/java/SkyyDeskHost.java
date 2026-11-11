@@ -28,12 +28,21 @@ public class SkyyDeskHost {
         int skyydesk_set_option(String key, String value);
     }
 
+    // The connection waiting for an answer. Only main reads the terminal: the callback runs on a
+    // library thread, and two readers of stdin would take each other's answers.
+    static volatile int pending = -1;
+
     // Kept in a field: JNA must not let the callback be collected while the library holds it.
     static final SkyyDesk.EventCb ON_EVENT = (kind, payload, user) -> {
         switch (kind) {
             case SkyyDesk.EVENT_INCOMING -> {
+                // payload is JSON; "id" is the connection, "name" and "peer_id" say who is coming
                 System.out.println("incoming: " + payload);
-                // Decide here; this example lets everyone with the password in.
+                if (payload.contains("\"authorized\":false")) {
+                    var m = java.util.regex.Pattern.compile("\"id\":(\\d+)").matcher(payload);
+                    pending = m.find() ? Integer.parseInt(m.group(1)) : -1;
+                    System.out.print("allow connection " + pending + "? [y/N] ");
+                }
             }
             case SkyyDesk.EVENT_INCOMING_CLOSED -> System.out.println("closed: " + payload);
             case SkyyDesk.EVENT_ENROLLED -> System.out.println("address book: " + payload);
@@ -46,14 +55,22 @@ public class SkyyDeskHost {
         return n < 0 ? "" : new String(b, 0, n, java.nio.charset.StandardCharsets.UTF_8);
     }
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws Exception {
         SkyyDesk d = SkyyDesk.LIB;
         d.skyydesk_init("skyydesk-data");
         d.skyydesk_set_event_callback(ON_EVENT, null);
         if (args.length > 0) d.skyydesk_set_option("enroll-key", args[0]);
-        d.skyydesk_start(1);
+        if (d.skyydesk_start(1) != 0) System.exit(1);
         System.out.println("SkyyDesk ID " + read(d::skyydesk_my_id)
                 + ", one-time password " + read(d::skyydesk_password));
-        Thread.currentThread().join();
+
+        var in = new java.io.BufferedReader(new java.io.InputStreamReader(System.in));
+        for (String line; (line = in.readLine()) != null; ) {
+            int conn = pending;
+            if (conn < 0) continue;
+            pending = -1;
+            if (line.startsWith("y") || line.startsWith("Y")) d.skyydesk_accept(conn); else d.skyydesk_close(conn);
+        }
+        Thread.currentThread().join(); // no terminal left: keep the machine reachable
     }
 }

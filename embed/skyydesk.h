@@ -25,7 +25,8 @@ extern "C" {
 typedef void (*skyydesk_event_cb)(int kind, const char *payload, void *user);
 
 /* Call once, as the first thing in main. The library starts copies of the host
- * executable for its own helper roles, and those copies exit inside this call.
+ * executable, with the host's own arguments, for its own helper roles, and those
+ * copies exit inside this call.
  * Settings live in the user's configuration folder (%APPDATA%\SkyyDeskHost\config
  * on Windows, ~/.config/skyydeskhost on Linux); app_dir is reserved for platforms
  * without one. Returns 0, or -1 if app_dir is NULL. */

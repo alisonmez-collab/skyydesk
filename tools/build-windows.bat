@@ -139,6 +139,12 @@ set "YOL_ANONIM=%YOL_ANONIM% --remap-path-prefix=%USERPROFILE%\.cargo\git=/paket
 set "YOL_ANONIM=%YOL_ANONIM% --remap-path-prefix=%CD%=/skyydesk"
 set "YOL_ANONIM=%YOL_ANONIM% --remap-path-prefix=%VCPKG_ROOT%=/kutuphaneler"
 set "YOL_ANONIM=%YOL_ANONIM% --remap-path-prefix=C:\ElpoDeskBuild=/derleme"
+rem C ve C++ kaynaklari hata iletisine __FILE__ ile tam yolu yaziyor; bunu
+rem Rust bayragi gormez. MSVC'de -ffile-prefix-map karsiligi /d1trimfile:
+rem verilen onek yoldan atilir, depo ici yol kalir. 11.11.2026: yayinlanan
+rem kutuphanede derleme kullanicisinin ev dizini hwcodec yuzunden geciyordu.
+set "CFLAGS=/d1trimfile:%CD%\ /d1trimfile:%USERPROFILE%\.cargo\ %CFLAGS%"
+set "CXXFLAGS=/d1trimfile:%CD%\ /d1trimfile:%USERPROFILE%\.cargo\ %CXXFLAGS%"
 rem config.toml bu hedefte statik CRT istiyor. RUSTFLAGS ortam degiskeni
 rem config.toml'u EZDIGI icin ayni bayragi buraya da koymak zorundayiz;
 rem yoksa hwcodec nesneleri /MT, gerisi /MD derlenip baglanti oluyor.

@@ -714,6 +714,13 @@ pub fn check_available_hwcodec() -> String {
     serde_json::to_string(&c).unwrap_or_default()
 }
 
+/// Builds the command that runs the check. Unset, the process re-runs its own executable
+/// with `--check-hwcodec-config`; the embedding library sets its own, because a host
+/// application does not know that flag (see src/skyydesk_capi.rs).
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub static CHECK_COMMAND: std::sync::RwLock<Option<fn() -> Option<std::process::Command>>> =
+    std::sync::RwLock::new(None);
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn start_check_process() {
     if !enable_hwcodec_option() || HwCodecConfig::already_set() {
@@ -722,39 +729,42 @@ pub fn start_check_process() {
     use hbb_common::allow_err;
     use std::sync::Once;
     let f = || {
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(_) = exe.file_name().to_owned() {
-                let arg = "--check-hwcodec-config";
-                if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
-                    #[cfg(windows)]
-                    hwcodec::common::child_exit_when_parent_exit(child.id());
-                    // wait up to 30 seconds, it maybe slow on windows startup for poorly performing machines
-                    for _ in 0..30 {
-                        std::thread::sleep(std::time::Duration::from_secs(1));
-                        if let Ok(Some(_)) = child.try_wait() {
-                            break;
-                        }
-                    }
-                    allow_err!(child.kill());
-                    std::thread::sleep(std::time::Duration::from_millis(30));
-                    match child.try_wait() {
-                        Ok(Some(status)) => {
-                            log::info!("Check hwcodec config, exit with: {status}")
-                        }
-                        Ok(None) => {
-                            log::info!(
-                                "Check hwcodec config, status not ready yet, let's really wait"
-                            );
-                            let res = child.wait();
-                            log::info!("Check hwcodec config, wait result: {res:?}");
-                        }
-                        Err(e) => {
-                            log::error!("Check hwcodec config, error attempting to wait: {e}")
-                        }
-                    }
+        let command = match *CHECK_COMMAND.read().unwrap() {
+            Some(make) => make(),
+            None => std::env::current_exe().ok().map(|exe| {
+                let mut command = std::process::Command::new(exe);
+                command.arg("--check-hwcodec-config");
+                command
+            }),
+        };
+        if let Some(Ok(mut child)) = command.map(|mut command| command.spawn()) {
+            #[cfg(windows)]
+            hwcodec::common::child_exit_when_parent_exit(child.id());
+            // wait up to 30 seconds, it maybe slow on windows startup for poorly performing machines
+            for _ in 0..30 {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if let Ok(Some(_)) = child.try_wait() {
+                    break;
                 }
             }
-        };
+            allow_err!(child.kill());
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    log::info!("Check hwcodec config, exit with: {status}")
+                }
+                Ok(None) => {
+                    log::info!(
+                        "Check hwcodec config, status not ready yet, let's really wait"
+                    );
+                    let res = child.wait();
+                    log::info!("Check hwcodec config, wait result: {res:?}");
+                }
+                Err(e) => {
+                    log::error!("Check hwcodec config, error attempting to wait: {e}")
+                }
+            }
+        }
     };
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {

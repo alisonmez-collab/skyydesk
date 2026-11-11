@@ -32,6 +32,18 @@ const EMBED_APP_NAME: &str = "SkyyDeskHost";
 // application: `--check-hwcodec-config` at start-up, the others in the desktop client's
 // process layout. The host knows none of these flags and would start over, spawning again.
 const HELPER_ROLES: &[&str] = &["--check-hwcodec-config", "--cm", "--cm-no-ui", "--tray", "--server", "--service"];
+// The role the library itself starts a copy for travels here rather than as an argument:
+// the host's own argument parsing runs first and would not know it.
+const HELPER_ENV: &str = "SKYYDESK_EMBED_HELPER";
+
+/// Starts the host again the way it was started, so that an interpreter (`java -cp ...`,
+/// `dotnet app.dll`) runs the same program rather than being handed an unknown flag.
+#[cfg(feature = "hwcodec")]
+fn hwcodec_check_command() -> Option<std::process::Command> {
+    let mut command = std::process::Command::new(std::env::current_exe().ok()?);
+    command.args(std::env::args_os().skip(1)).env(HELPER_ENV, "--check-hwcodec-config");
+    Some(command)
+}
 // Server and account options are not the host's to change: they would point the machine
 // somewhere other than our servers, or stand in for a sign-in this library does not have.
 const LOCKED_OPTIONS: &[&str] = &[
@@ -87,7 +99,11 @@ pub unsafe extern "C" fn skyydesk_init(app_dir: *const c_char) -> c_int {
         // connections. Set before the first read of the configuration, which picks the path.
         *hbb_common::config::APP_NAME.write().unwrap() = EMBED_APP_NAME.to_owned();
         hbb_common::init_log(false, "skyydesk");
-        if let Some(role) = std::env::args().nth(1).filter(|a| HELPER_ROLES.contains(&a.as_str())) {
+        let role = std::env::var(HELPER_ENV)
+            .ok()
+            .or_else(|| std::env::args().nth(1))
+            .filter(|a| HELPER_ROLES.contains(&a.as_str()));
+        if let Some(role) = role {
             if role == "--check-hwcodec-config" {
                 #[cfg(feature = "hwcodec")]
                 crate::ipc::hwcodec_process();
@@ -102,6 +118,10 @@ pub unsafe extern "C" fn skyydesk_init(app_dir: *const c_char) -> c_int {
             use hbb_common::rand::Rng;
             Config::set_id(&hbb_common::rand::thread_rng().gen_range(100_000_000u32..1_000_000_000).to_string());
             Config::set_option(OPTION_OWN_ID.to_owned(), "Y".to_owned());
+        }
+        #[cfg(feature = "hwcodec")]
+        {
+            *scrap::hwcodec::CHECK_COMMAND.write().unwrap() = Some(hwcodec_check_command);
         }
         crate::common::global_init();
     });

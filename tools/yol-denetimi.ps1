@@ -19,7 +19,9 @@ if (-not (Test-Path $Kutuphane)) {
 }
 
 $metin = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($Kutuphane))
-$desen = [regex]::Escape($Kok) + '[^\x00"]{0,90}'
+# The build user's home is searched too: C and C++ sources outside the tree
+# (cargo's own copies) wrote it into the library before 11.11.2026.
+$desen = '(' + [regex]::Escape($Kok) + '|' + [regex]::Escape($env:USERPROFILE) + ')[^\x00"]{0,90}'
 $hepsi = [regex]::Matches($metin, $desen)
 
 $bizim = @($hepsi | Where-Object { $_.Value -notmatch 'vcpkg.buildtrees' })

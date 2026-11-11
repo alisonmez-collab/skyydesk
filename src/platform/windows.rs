@@ -3888,6 +3888,8 @@ pub fn try_remove_temp_update_files() {
     }
 }
 
+/// taskkill reports to the console it inherits, which in the embedding library is the host
+/// application's: "ERROR: The process ... not found" whenever no broker runs.
 #[inline]
 pub fn try_kill_broker() {
     allow_err!(std::process::Command::new("cmd")
@@ -3896,6 +3898,8 @@ pub fn try_kill_broker() {
             "taskkill /F /IM {}",
             WIN_TOPMOST_INJECTED_PROCESS_EXE
         ))
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
         .spawn());
 }

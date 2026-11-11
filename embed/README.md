@@ -124,7 +124,7 @@ executable on build.
 
 | platform | as the machine connected to | note |
 |---|---|---|
-| Windows 10/11 | yes | |
+| Windows 10/11 | yes | run it in an application the user starts in their own session; as a Windows service it sees no desktop and receives no connections |
 | Linux (X11) | yes | Wayland asks the user to share the screen every session |
 | Android | not yet | Android lets an app share its screen only through its own permission screens and services; a package for that is in progress |
 | iOS | no | iOS does not let an app control the screen |
