@@ -132,7 +132,7 @@ executable on build.
 
 ## Licence
 
-AGPL-3.0, like the SkyyDesk client it is built from. Source: this repository.
+AGPL-3.0, like the SkyyDesk client it is built from. Source: https://github.com/alisonmez-collab/skyydesk
 
 | what you do | what AGPL asks of you |
 |---|---|

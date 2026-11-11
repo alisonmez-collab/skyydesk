@@ -14,6 +14,8 @@
     <Description>Makes the machine your application runs on reachable from SkyyDesk.</Description>
     <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
     <PackageProjectUrl>https://skyydesk.com/gelistiriciler/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/alisonmez-collab/skyydesk</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
   <ItemGroup>
     <None Include="runtimes/**" Pack="true" PackagePath="runtimes/" Condition="Exists('runtimes')" />
