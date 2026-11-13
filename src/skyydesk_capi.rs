@@ -6,6 +6,9 @@
 //!
 //! Strings crossing the boundary are UTF-8 and NUL-terminated. A pointer handed to the event
 //! callback is valid only for the duration of that call, which runs on a library thread.
+//!
+//! On Android the same functions are reached from Kotlin through [`android`]; the screen is
+//! captured by the package's foreground service, which the core calls back into.
 
 use hbb_common::{config::Config, log, password_security};
 use std::{
@@ -31,14 +34,16 @@ const EMBED_APP_NAME: &str = "SkyyDeskHost";
 // The core starts helper processes from its own executable, which here is the host
 // application: `--check-hwcodec-config` at start-up, the others in the desktop client's
 // process layout. The host knows none of these flags and would start over, spawning again.
+#[cfg(not(target_os = "android"))]
 const HELPER_ROLES: &[&str] = &["--check-hwcodec-config", "--cm", "--cm-no-ui", "--tray", "--server", "--service"];
 // The role the library itself starts a copy for travels here rather than as an argument:
 // the host's own argument parsing runs first and would not know it.
+#[cfg(not(target_os = "android"))]
 const HELPER_ENV: &str = "SKYYDESK_EMBED_HELPER";
 
 /// Starts the host again the way it was started, so that an interpreter (`java -cp ...`,
 /// `dotnet app.dll`) runs the same program rather than being handed an unknown flag.
-#[cfg(feature = "hwcodec")]
+#[cfg(all(feature = "hwcodec", not(target_os = "android")))]
 fn hwcodec_check_command() -> Option<std::process::Command> {
     let mut command = std::process::Command::new(std::env::current_exe().ok()?);
     command.args(std::env::args_os().skip(1)).env(HELPER_ENV, "--check-hwcodec-config");
@@ -87,9 +92,13 @@ unsafe fn copy_out(s: &str, out: *mut c_char, len: c_int) -> c_int {
 /// `app_dir` is used only on platforms without one.
 #[no_mangle]
 pub unsafe extern "C" fn skyydesk_init(app_dir: *const c_char) -> c_int {
-    let Some(app_dir) = str_arg(app_dir) else {
-        return -1;
-    };
+    match str_arg(app_dir) {
+        Some(app_dir) => init(app_dir),
+        None => -1,
+    }
+}
+
+fn init(app_dir: String) -> c_int {
     static INIT: std::sync::Once = std::sync::Once::new();
     INIT.call_once(|| {
         *hbb_common::config::APP_DIR.write().unwrap() = app_dir;
@@ -99,11 +108,12 @@ pub unsafe extern "C" fn skyydesk_init(app_dir: *const c_char) -> c_int {
         // connections. Set before the first read of the configuration, which picks the path.
         *hbb_common::config::APP_NAME.write().unwrap() = EMBED_APP_NAME.to_owned();
         hbb_common::init_log(false, "skyydesk");
-        let role = std::env::var(HELPER_ENV)
+        #[cfg(not(target_os = "android"))]
+        if let Some(role) = std::env::var(HELPER_ENV)
             .ok()
             .or_else(|| std::env::args().nth(1))
-            .filter(|a| HELPER_ROLES.contains(&a.as_str()));
-        if let Some(role) = role {
+            .filter(|a| HELPER_ROLES.contains(&a.as_str()))
+        {
             if role == "--check-hwcodec-config" {
                 #[cfg(feature = "hwcodec")]
                 crate::ipc::hwcodec_process();
@@ -119,7 +129,7 @@ pub unsafe extern "C" fn skyydesk_init(app_dir: *const c_char) -> c_int {
             Config::set_id(&hbb_common::rand::thread_rng().gen_range(100_000_000u32..1_000_000_000).to_string());
             Config::set_option(OPTION_OWN_ID.to_owned(), "Y".to_owned());
         }
-        #[cfg(feature = "hwcodec")]
+        #[cfg(all(feature = "hwcodec", not(target_os = "android")))]
         {
             *scrap::hwcodec::CHECK_COMMAND.write().unwrap() = Some(hwcodec_check_command);
         }
@@ -147,14 +157,16 @@ pub unsafe extern "C" fn skyydesk_my_id(out: *mut c_char, len: c_int) -> c_int {
 // connection as an event and decides with skyydesk_accept / skyydesk_close.
 
 #[derive(Clone)]
-struct HostCm;
+pub(crate) struct HostCm;
 
 impl crate::ui_cm_interface::InvokeUiCM for HostCm {
     fn add_connection(&self, client: &crate::ui_cm_interface::Client) {
-        emit(
-            SKYYDESK_EVENT_INCOMING,
-            &serde_json::to_string(client).unwrap_or_default(),
-        );
+        let client = serde_json::to_string(client).unwrap_or_default();
+        // The capture service starts the screen for a connection that is already authorized
+        // and shows the notification Android requires while the screen is shared.
+        #[cfg(target_os = "android")]
+        android_service("add_connection", &client);
+        emit(SKYYDESK_EVENT_INCOMING, &client);
     }
 
     fn remove_connection(&self, id: i32, _close: bool) {
@@ -169,9 +181,29 @@ impl crate::ui_cm_interface::InvokeUiCM for HostCm {
 
     fn show_elevation(&self, _show: bool) {}
 
-    fn update_voice_call_state(&self, _client: &crate::ui_cm_interface::Client) {}
+    #[allow(unused_variables)]
+    fn update_voice_call_state(&self, client: &crate::ui_cm_interface::Client) {
+        #[cfg(target_os = "android")]
+        android_service("update_voice_call_state", &serde_json::to_string(client).unwrap_or_default());
+    }
 
     fn file_transfer_log(&self, _action: &str, _log: &str) {}
+}
+
+#[cfg(target_os = "android")]
+fn android_service(name: &str, client: &str) {
+    if let Err(e) = scrap::android::call_main_service_set_by_name(name, Some(client), None) {
+        log::warn!("capture service did not take {}: {}", name, e);
+    }
+}
+
+#[cfg(target_os = "android")]
+static EMBEDDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether connections go to the embedding application rather than the SkyyDesk app's screen.
+#[cfg(target_os = "android")]
+pub(crate) fn embedded() -> bool {
+    EMBEDDED.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 /// Lets SkyyDesk users connect to this machine. With `allow_password` 0, every connection
@@ -181,23 +213,41 @@ impl crate::ui_cm_interface::InvokeUiCM for HostCm {
 /// If a SkyyDesk client already runs on this machine, it keeps serving connections.
 #[no_mangle]
 pub extern "C" fn skyydesk_start(allow_password: c_int) -> c_int {
+    start(allow_password != 0)
+}
+
+fn start(allow_password: bool) -> c_int {
     if EVENT_CB.read().unwrap().is_none() {
         // A connection nobody can see or approve must not be possible.
         return -2;
     }
-    let mode = if allow_password != 0 { "" } else { "click" };
+    let mode = if allow_password { "" } else { "click" };
     Config::set_option("approve-mode".to_owned(), mode.to_owned());
     if password_security::temporary_password().is_empty() {
         password_security::update_temporary_password();
     }
+    // Android: stop() switched the service off the same way the SkyyDesk app does
+    // ("stop-service", kept in the config); every start switches it back on.
+    #[cfg(target_os = "android")]
+    crate::flutter_ffi::main_start_service();
     static START: std::sync::Once = std::sync::Once::new();
     START.call_once(|| {
         #[cfg(target_os = "linux")]
         std::thread::spawn(crate::ipc::start_pa);
-        let cm = crate::ui_cm_interface::ConnectionManager { ui_handler: HostCm };
-        std::thread::spawn(move || crate::ui_cm_interface::start_ipc(cm));
-        // This process is the server; the desktop client runs it as a separate service.
-        std::thread::spawn(|| crate::start_server(true, false));
+        #[cfg(not(target_os = "android"))]
+        {
+            let cm = crate::ui_cm_interface::ConnectionManager { ui_handler: HostCm };
+            std::thread::spawn(move || crate::ui_cm_interface::start_ipc(cm));
+            // This process is the server; the desktop client runs it as a separate service.
+            std::thread::spawn(|| crate::start_server(true, false));
+        }
+        // Android has no connection-manager process: each connection is handed to
+        // start_channel in this process, which asks embedded() whose it is.
+        #[cfg(target_os = "android")]
+        {
+            EMBEDDED.store(true, std::sync::atomic::Ordering::SeqCst);
+            std::thread::spawn(|| crate::start_server(true));
+        }
         std::thread::spawn(enroll);
     });
     0
@@ -230,10 +280,14 @@ pub extern "C" fn skyydesk_new_password() {
 /// Returns 0, or -1 if it could not be stored or changing it is disabled.
 #[no_mangle]
 pub unsafe extern "C" fn skyydesk_set_password(password: *const c_char) -> c_int {
-    let Some(password) = str_arg(password) else {
-        return -1;
-    };
-    if !Config::is_disable_change_permanent_password() && Config::set_permanent_password(&password) {
+    match str_arg(password) {
+        Some(password) => set_password(&password),
+        None => -1,
+    }
+}
+
+fn set_password(password: &str) -> c_int {
+    if !Config::is_disable_change_permanent_password() && Config::set_permanent_password(password) {
         0
     } else {
         -1
@@ -259,9 +313,13 @@ pub unsafe extern "C" fn skyydesk_get_option(key: *const c_char, out: *mut c_cha
 /// Returns 0, or -1 for a server or account option, which the library does not change.
 #[no_mangle]
 pub unsafe extern "C" fn skyydesk_set_option(key: *const c_char, value: *const c_char) -> c_int {
-    let (Some(key), Some(value)) = (str_arg(key), str_arg(value)) else {
-        return -1;
-    };
+    match (str_arg(key), str_arg(value)) {
+        (Some(key), Some(value)) => set_option(key, value),
+        _ => -1,
+    }
+}
+
+fn set_option(key: String, value: String) -> c_int {
     if LOCKED_OPTIONS.contains(&key.as_str()) {
         return -1;
     }
@@ -323,7 +381,155 @@ fn whoami_platform() -> &'static str {
         "Windows"
     } else if cfg!(target_os = "macos") {
         "Mac OS"
+    } else if cfg!(target_os = "android") {
+        "Android"
     } else {
         "Linux"
+    }
+}
+
+/// The Kotlin side of the Android package (`com.skyydesk.embed.Native`). The same calls as the
+/// C functions above; events are delivered to `Native.onEvent(kind, payload)`.
+#[cfg(target_os = "android")]
+mod android {
+    use super::*;
+    use jni::{
+        objects::{GlobalRef, JClass, JString, JValue},
+        sys::{jboolean, jint, jstring},
+        JNIEnv, JavaVM,
+    };
+
+    static JAVA: std::sync::OnceLock<(JavaVM, GlobalRef)> = std::sync::OnceLock::new();
+
+    unsafe extern "C" fn java_event(kind: c_int, payload: *const c_char, _user: *mut c_void) {
+        let Some((vm, class)) = JAVA.get() else {
+            return;
+        };
+        let Ok(mut env) = vm.attach_current_thread_as_daemon() else {
+            return;
+        };
+        let payload = CStr::from_ptr(payload).to_string_lossy();
+        let sent = env.with_local_frame(4, |env| -> jni::errors::Result<()> {
+            let payload = env.new_string(payload.as_ref())?;
+            env.call_static_method(
+                class,
+                "onEvent",
+                "(ILjava/lang/String;)V",
+                &[JValue::Int(kind), JValue::Object(&payload)],
+            )?;
+            Ok(())
+        });
+        if sent.is_err() {
+            // A listener that threw must not leave an exception pending on a library thread.
+            let _ = env.exception_describe();
+            let _ = env.exception_clear();
+            log::error!("Native.onEvent failed: {:?}", sent);
+        }
+    }
+
+    fn string(env: &mut JNIEnv, s: &JString) -> Option<String> {
+        env.get_string(s).ok().map(Into::into)
+    }
+
+    fn jstr(env: &mut JNIEnv, s: &str) -> jstring {
+        env.new_string(s).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_init(
+        mut env: JNIEnv,
+        class: JClass,
+        app_dir: JString,
+        device_name: JString,
+    ) -> jint {
+        let (Some(app_dir), Some(device_name)) = (string(&mut env, &app_dir), string(&mut env, &device_name)) else {
+            return -1;
+        };
+        if JAVA.get().is_none() {
+            let (Ok(vm), Ok(class)) = (env.get_java_vm(), env.new_global_ref(class)) else {
+                return -1;
+            };
+            let _ = JAVA.set((vm, class));
+        }
+        *crate::common::DEVICE_NAME.lock().unwrap() = device_name;
+        let res = init(app_dir);
+        *EVENT_CB.write().unwrap() = Some((java_event, 0));
+        res
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_start(
+        _env: JNIEnv,
+        _class: JClass,
+        allow_password: jboolean,
+    ) -> jint {
+        start(allow_password != 0)
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_myId(mut env: JNIEnv, _class: JClass) -> jstring {
+        jstr(&mut env, &Config::get_id())
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_oneTimePassword(mut env: JNIEnv, _class: JClass) -> jstring {
+        jstr(&mut env, &password_security::temporary_password())
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_newOneTimePassword(_env: JNIEnv, _class: JClass) {
+        password_security::update_temporary_password();
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_setPermanentPassword(
+        mut env: JNIEnv,
+        _class: JClass,
+        value: JString,
+    ) -> jint {
+        match string(&mut env, &value) {
+            Some(value) => set_password(&value),
+            None => -1,
+        }
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_getOption(
+        mut env: JNIEnv,
+        _class: JClass,
+        key: JString,
+    ) -> jstring {
+        let value = string(&mut env, &key).map(|k| Config::get_option(&k)).unwrap_or_default();
+        jstr(&mut env, &value)
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_setOption(
+        mut env: JNIEnv,
+        _class: JClass,
+        key: JString,
+        value: JString,
+    ) -> jint {
+        match (string(&mut env, &key), string(&mut env, &value)) {
+            (Some(key), Some(value)) => set_option(key, value),
+            _ => -1,
+        }
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_accept(_env: JNIEnv, _class: JClass, connection: jint) {
+        crate::ui_cm_interface::authorize(connection);
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_close(_env: JNIEnv, _class: JClass, connection: jint) {
+        crate::ui_cm_interface::close(connection);
+    }
+
+    // Takes the device offline until the next start (12.11.2026: after Stop it still
+    // answered connection requests).
+    #[no_mangle]
+    pub extern "system" fn Java_com_skyydesk_embed_Native_stop(_env: JNIEnv, _class: JClass) {
+        crate::flutter_ffi::main_stop_service();
     }
 }

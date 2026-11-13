@@ -8,6 +8,8 @@
 #   ./tools/build-android.sh              arm64-v8a (varsayilan)
 #   ./tools/build-android.sh armeabi-v7a  32 bit ARM
 #   ./tools/build-android.sh --check      sadece on kosullari dogrula
+#   ./tools/build-android.sh --aar [ABI]  uygulama yerine gomme paketi (.aar) ve ornek uygulama
+#                                         (embed/android); Rust adimi ayni, paket adimi farkli
 #
 # NEDEN LINUX: Android'i Windows kutusundan capraz derlemek denendi ve zincir
 # her adimda kirildi — cargo-ndk'nin Windows sarmalayicisi API seviyesini
@@ -58,6 +60,8 @@ cd "$ROOT" || exit 1
 say() { printf '\n=== %s — %s\n' "$1" "$(date '+%H:%M:%S')"; }
 die() { printf 'HATA: %s\n' "$1" >&2; exit 1; }
 
+AAR=""
+[ "${1:-}" = "--aar" ] && { AAR=1; shift; }
 ABI="${1:-arm64-v8a}"
 [ "$ABI" = "--check" ] && { ABI=arm64-v8a; CHECKONLY=1; }
 case "$ABI" in
@@ -101,7 +105,21 @@ orphan=$(git status --porcelain --ignored flutter/assets res 2>/dev/null | grep 
 echo "  -> yetim dosya yok"
 
 say "1/3 bagimliliklar (vcpkg, $TRIPLET)"
+# vcpkg manifest kipinde kurarken ayni installed/ agacindaki x64-linux ffmpeg'ini
+# siliyor (manifestte Linux ffmpeg'i yalniz static uclu icin var). O ffmpeg'i
+# Linux derlemesi (build-linux.sh, gomme kutuphanesi) kullaniyor; 12.11.2026'da
+# Android derlemesinden sonra Linux derlemesi "ffmpeg kurulu degil" diye durdu.
+LINUX_FFMPEG="$VCPKG_ROOT/installed/x64-linux/lib/libavcodec.a"
+LINUX_FFMPEG_VARDI=""; [ -f "$LINUX_FFMPEG" ] && LINUX_FFMPEG_VARDI=1
 ./flutter/build_android_deps.sh "$ABI" || die "vcpkg bagimliliklari"
+if [ -n "$LINUX_FFMPEG_VARDI" ] && [ ! -f "$LINUX_FFMPEG" ]; then
+  echo "  x64-linux ffmpeg silinmis -> geri kuruluyor (ikili onbellekten)"
+  # Depo kokunde vcpkg.json oldugu icin vcpkg burada manifest kipine gecer ve tek paket
+  # kurmayi reddeder; klasik kip icin ev klasorunden calistirilir.
+  ( cd "$HOME" && "$VCPKG_ROOT/vcpkg" install "ffmpeg[avcodec,avformat,avfilter,swscale,swresample,nvcodec]:x64-linux" ) \
+    > /var/tmp/vcpkg-ffmpeg-x64.log 2>&1 \
+    && [ -f "$LINUX_FFMPEG" ] || die "x64-linux ffmpeg geri kurulamadi; Linux derlemesi calismaz (/var/tmp/vcpkg-ffmpeg-x64.log)"
+fi
 
 say "2/3 rust kutuphanesi ($RUSTTARGET)"
 # hwcodec'in build.rs'i bindgen calistiriyor ve bindgen sysroot verilmezse HOST
@@ -135,6 +153,33 @@ cp "$SO" "flutter/android/app/src/main/jniLibs/$ABI/libskyydesk.so"
 cp "$NDK_SYSROOT/usr/lib/$NDKABI/libc++_shared.so" \
   "flutter/android/app/src/main/jniLibs/$ABI/libc++_shared.so"
 printf '  libskyydesk.so %s bayt\n' "$(stat -c%s "flutter/android/app/src/main/jniLibs/$ABI/libskyydesk.so")"
+
+if [ -n "$AAR" ]; then
+  say "3/3 aar"
+  # Kutuphane, uygulamaya giden kopyanin aynisi: yukarida soyulmus hali.
+  JNI="embed/android/skyydesk/build/jniLibs/$ABI"
+  rm -rf "embed/android/skyydesk/build/jniLibs" && mkdir -p "$JNI"
+  cp "flutter/android/app/src/main/jniLibs/$ABI/libskyydesk.so" "flutter/android/app/src/main/jniLibs/$ABI/libc++_shared.so" "$JNI/"
+  GRADLE="${GRADLE:-$(ls -d "$HOME"/.gradle/wrapper/dists/gradle-8.11.1-all/*/gradle-8.11.1/bin/gradle 2>/dev/null | head -1)}"
+  [ -x "$GRADLE" ] || die "gradle 8.11.1 yok (GRADLE= ile verilebilir)"
+  ( cd embed/android && "$GRADLE" --console=plain :skyydesk:assembleRelease :example:assembleDebug ) || die "gradle"
+  AAR_OUT=embed/android/skyydesk/build/outputs/aar/skyydesk-release.aar
+  [ -f "$AAR_OUT" ] || die "aar olusmadi: $AAR_OUT"
+  AAR_OLC=$(mktemp -d /tmp/aar-yol-XXXXXX)
+  unzip -q -o "$AAR_OUT" "jni/*" -d "$AAR_OLC" || die "aar acilamadi (yol denetimi)"
+  AAR_HATA=0
+  for _so in $(find "$AAR_OLC" -name 'libskyydesk.so'); do
+    yol_denetimi "$_so" || AAR_HATA=1
+  done
+  rm -rf "$AAR_OLC"
+  [ "$AAR_HATA" -eq 0 ] || die "derleme makinesinin yolu pakete sizmis (yukariya bak)."
+  say "sonuc"
+  cp -f "$AAR_OUT" SkyyDesk-Embed-Android.aar
+  cp -f embed/examples/android/build/outputs/apk/debug/example-debug.apk SkyyDesk-Embed-Android-ornek.apk
+  printf '  paket : SkyyDesk-Embed-Android.aar (%s bayt)\n' "$(stat -c%s SkyyDesk-Embed-Android.aar)"
+  printf '  ornek : SkyyDesk-Embed-Android-ornek.apk (%s bayt)\n' "$(stat -c%s SkyyDesk-Embed-Android-ornek.apk)"
+  exit 0
+fi
 
 say "3/3 apk"
 # Kaynaklar (ikonlar, strings) degistiginde Gradle'in eski ara ciktilari

@@ -95,6 +95,8 @@ android {
     ndkVersion '28.2.13676358'
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
+        // Screen capture and input, shared with the embedding package (embed/android).
+        main.java.srcDirs += '../host/kotlin'
 
         main.proto.srcDirs += '../../../libs/hbb_common/protos'
         main.proto.includes += "message.proto"

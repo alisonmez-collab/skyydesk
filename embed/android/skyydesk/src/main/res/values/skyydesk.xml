@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Applications can replace any of these with a resource of the same name. -->
+<resources>
+    <string name="skyydesk_input_service_name">SkyyDesk Input</string>
+    <string name="skyydesk_accessibility_description">Allow other devices to control your phone using virtual touch, when SkyyDesk screen sharing is established</string>
+    <color name="skyydesk_notification">#099FA5</color>
+</resources>

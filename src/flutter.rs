@@ -1641,6 +1641,16 @@ pub mod connection_manager {
         tx: UnboundedSender<crate::ipc::Data>,
     ) {
         use crate::ui_cm_interface::start_listen;
+        // An application embedding the library decides on connections itself; there is no
+        // Flutter screen in its process to ask.
+        #[cfg(target_os = "android")]
+        if crate::skyydesk_capi::embedded() {
+            let cm = crate::ui_cm_interface::ConnectionManager {
+                ui_handler: crate::skyydesk_capi::HostCm,
+            };
+            std::thread::spawn(move || start_listen(cm, rx, tx));
+            return;
+        }
         let cm = crate::ui_cm_interface::ConnectionManager {
             ui_handler: FlutterHandler {},
         };

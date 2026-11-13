@@ -1,0 +1,81 @@
+import groovy.json.JsonSlurper
+
+plugins {
+    id "com.android.library"
+    id "org.jetbrains.kotlin.android"
+    id "com.google.protobuf"
+}
+
+def repo = file("../../..")
+
+android {
+    namespace "com.skyydesk.embed"
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 24
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    sourceSets {
+        // Screen capture and input are the SkyyDesk app's own code, compiled here as well.
+        main.java.srcDirs += ["src/main/kotlin", "${repo}/flutter/android/host/kotlin"]
+        main.proto.srcDirs += "${repo}/libs/hbb_common/protos"
+        main.proto.includes += "message.proto"
+        // tools/build-android-embed.sh puts libskyydesk.so and libc++_shared.so here.
+        main.jniLibs.srcDirs = ["build/jniLibs"]
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.20.1"
+    }
+    generateProtoTasks {
+        all().configureEach { task ->
+            task.builtins {
+                java {
+                    option "lite"
+                }
+            }
+        }
+    }
+}
+
+// The library checks TLS certificates through Android, with a small Kotlin helper that the
+// rustls-platform-verifier crate ships as a local Maven package. An application cannot fetch
+// that package from anywhere, so its classes go inside this one.
+File rustlsVerifierAar(File repo) {
+    def text = providers.exec {
+        it.workingDir = repo
+        commandLine("cargo", "metadata", "--format-version", "1")
+    }.standardOutput.asText.get()
+    def pkg = new JsonSlurper().parseText(text).packages.find { it.name == "rustls-platform-verifier-android" }
+    if (pkg == null) {
+        throw new GradleException("rustls-platform-verifier-android is not in cargo metadata")
+    }
+    return fileTree(new File(file(pkg.manifest_path).parentFile, "maven")).matching { include "**/*.aar" }.singleFile
+}
+
+def rustlsVerifierClasses = tasks.register("rustlsVerifierClasses", Copy) {
+    from(zipTree(rustlsVerifierAar(repo))) {
+        include "classes.jar"
+        rename { "rustls-platform-verifier.jar" }
+    }
+    into layout.buildDirectory.dir("rustls")
+}
+
+dependencies {
+    implementation files(layout.buildDirectory.file("rustls/rustls-platform-verifier.jar")).builtBy(rustlsVerifierClasses)
+    implementation "androidx.core:core:1.13.1"
+    implementation "com.google.protobuf:protobuf-javalite:3.20.1"
+}

@@ -129,8 +129,27 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         return true
     }
 
+    // Without this the host only sent its clipboard when someone pressed "sync clipboard" in the
+    // floating window, so copying on the phone never reached the other side. Android 10+ reads
+    // the clipboard only for the app in front, so this covers what is copied while the app
+    // that runs the service is open; elsewhere primaryClip is null and nothing is sent.
+    private val primaryClipChanged = ClipboardManager.OnPrimaryClipChangedListener {
+        val clipData = clipboardManager.primaryClip ?: return@OnPrimaryClipChangedListener
+        // Set by rustUpdateClipboard: it came from the other side, do not send it back.
+        if (lastUpdatedClipData?.let { isClipboardDataEqual(clipData, it) } == true) {
+            return@OnPrimaryClipChangedListener
+        }
+        checkPrimaryClip(false)
+    }
+
     fun setCaptureStarted(started: Boolean) {
+        if (started == _isCaptureStarted) return
         _isCaptureStarted = started
+        if (started) {
+            clipboardManager.addPrimaryClipChangedListener(primaryClipChanged)
+        } else {
+            clipboardManager.removePrimaryClipChangedListener(primaryClipChanged)
+        }
     }
 
     @Keep
@@ -193,5 +212,6 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         val clipData = ClipData(clipDescription, item)
         lastUpdatedClipData = clipData
         clipboardManager.setPrimaryClip(clipData)
+        Log.d(logTag, "clipboard from the remote set, ${text.length} chars")
     }
 }

@@ -106,3 +106,4 @@ res.bak-fd/
 # ikisi emekli marka adiyla duruyordu (FixDesk, tek y SkyDesk).
 *.apk
 *.aab
+/SkyyDesk-Embed-Android.aar

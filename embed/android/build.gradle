@@ -1,0 +1,7 @@
+// Same plugin versions as the SkyyDesk app (flutter/android/settings.gradle).
+plugins {
+    id "com.android.library" version "8.10.1" apply false
+    id "com.android.application" version "8.10.1" apply false
+    id "org.jetbrains.kotlin.android" version "2.1.21" apply false
+    id "com.google.protobuf" version "0.9.4" apply false
+}

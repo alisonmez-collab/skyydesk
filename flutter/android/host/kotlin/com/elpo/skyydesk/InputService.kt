@@ -67,15 +67,14 @@ class InputService : AccessibilityService() {
         var ctx: InputService? = null
         val isOpen: Boolean
             get() = ctx != null
+        /** Told on the main thread whenever the service is switched on or off. */
+        var stateListener: ((Boolean) -> Unit)? = null
     }
 
     private fun notifyInputState() {
-        val inputState = isOpen.toString()
+        val inputState = isOpen
         Handler(Looper.getMainLooper()).post {
-            MainActivity.flutterMethodChannel?.invokeMethod(
-                "on_state_changed",
-                mapOf("name" to "input", "value" to inputState)
-            )
+            stateListener?.invoke(inputState)
         }
     }
 

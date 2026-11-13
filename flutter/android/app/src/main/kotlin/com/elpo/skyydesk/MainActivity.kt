@@ -52,7 +52,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        if (MainService.isReady) {
+        if (CaptureService.isReady) {
             Intent(activity, MainService::class.java).also {
                 bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
             }
@@ -62,9 +62,15 @@ class MainActivity : FlutterActivity() {
             channelTag
         )
         initFlutterChannel(flutterMethodChannel!!)
+        InputService.stateListener = { open ->
+            flutterMethodChannel?.invokeMethod(
+                "on_state_changed",
+                mapOf("name" to "input", "value" to open.toString())
+            )
+        }
         thread {
             try {
-                setCodecInfo()
+                setCodecInfo(this)
             } catch (e: Exception) {
                 Log.e("MainActivity", "Failed to setCodecInfo: ${e.message}", e)
             }
@@ -85,6 +91,7 @@ class MainActivity : FlutterActivity() {
     private fun requestMediaProjection() {
         val intent = Intent(this, PermissionRequestTransparentActivity::class.java).apply {
             action = ACT_REQUEST_MEDIA_PROJECTION
+            putExtra(EXT_SERVICE_CLASS, MainService::class.java.name)
         }
         startActivityForResult(intent, REQ_INVOKE_PERMISSION_ACTIVITY_MEDIA_PROJECTION)
     }
@@ -115,8 +122,8 @@ class MainActivity : FlutterActivity() {
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             Log.d(logTag, "onServiceConnected")
-            val binder = service as MainService.LocalBinder
-            mainService = binder.getService()
+            val binder = service as CaptureService.LocalBinder
+            mainService = binder.getService() as MainService
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -133,7 +140,7 @@ class MainActivity : FlutterActivity() {
                     Intent(activity, MainService::class.java).also {
                         bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
                     }
-                    if (MainService.isReady) {
+                    if (CaptureService.isReady) {
                         result.success(false)
                         return@setMethodCallHandler
                     }
@@ -193,7 +200,7 @@ class MainActivity : FlutterActivity() {
                     )
                     Companion.flutterMethodChannel?.invokeMethod(
                         "on_state_changed",
-                        mapOf("name" to "media", "value" to MainService.isReady.toString())
+                        mapOf("name" to "media", "value" to CaptureService.isReady.toString())
                     )
                     result.success(true)
                 }
@@ -281,85 +288,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun setCodecInfo() {
-        val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
-        val codecs = codecList.codecInfos
-        val codecArray = JSONArray()
-
-        val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val wh = getScreenSize(windowManager)
-        var w = wh.first
-        var h = wh.second
-        val align = 64
-        w = (w + align - 1) / align * align
-        h = (h + align - 1) / align * align
-        codecs.forEach { codec ->
-            val codecObject = JSONObject()
-            codecObject.put("name", codec.name)
-            codecObject.put("is_encoder", codec.isEncoder)
-            var hw: Boolean? = null;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                hw = codec.isHardwareAccelerated
-            } else {
-                // https://chromium.googlesource.com/external/webrtc/+/HEAD/sdk/android/src/java/org/webrtc/MediaCodecUtils.java#29
-                // https://chromium.googlesource.com/external/webrtc/+/master/sdk/android/api/org/webrtc/HardwareVideoEncoderFactory.java#229
-                if (listOf("OMX.google.", "OMX.SEC.", "c2.android").any { codec.name.startsWith(it, true) }) {
-                    hw = false
-                } else if (listOf("c2.qti", "OMX.qcom.video", "OMX.Exynos", "OMX.hisi", "OMX.MTK", "OMX.Intel", "OMX.Nvidia").any { codec.name.startsWith(it, true) }) {
-                    hw = true
-                }
-            }
-            if (hw != true) {
-                return@forEach
-            }
-            codecObject.put("hw", hw)
-            var mime_type = ""
-            codec.supportedTypes.forEach { type ->
-                if (listOf("video/avc", "video/hevc").contains(type)) { // "video/x-vnd.on2.vp8", "video/x-vnd.on2.vp9", "video/av01"
-                    mime_type = type;
-                }
-            }
-            if (mime_type.isNotEmpty()) {
-                codecObject.put("mime_type", mime_type)
-                val caps = codec.getCapabilitiesForType(mime_type)
-                if (codec.isEncoder) {
-                    // Encoder's max_height and max_width are interchangeable
-                    if (!caps.videoCapabilities.isSizeSupported(w,h) && !caps.videoCapabilities.isSizeSupported(h,w)) {
-                        return@forEach
-                    }
-                }
-                codecObject.put("min_width", caps.videoCapabilities.supportedWidths.lower)
-                codecObject.put("max_width", caps.videoCapabilities.supportedWidths.upper)
-                codecObject.put("min_height", caps.videoCapabilities.supportedHeights.lower)
-                codecObject.put("max_height", caps.videoCapabilities.supportedHeights.upper)
-                val surface = caps.colorFormats.contains(COLOR_FormatSurface);
-                codecObject.put("surface", surface)
-                val nv12 = caps.colorFormats.contains(COLOR_FormatYUV420SemiPlanar)
-                codecObject.put("nv12", nv12)
-                if (!(nv12 || surface)) {
-                    return@forEach
-                }
-                codecObject.put("min_bitrate", caps.videoCapabilities.bitrateRange.lower / 1000)
-                codecObject.put("max_bitrate", caps.videoCapabilities.bitrateRange.upper / 1000)
-                if (!codec.isEncoder) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        codecObject.put("low_latency", caps.isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency))
-                    }
-                }
-                if (!codec.isEncoder) {
-                    return@forEach
-                }
-                codecArray.put(codecObject)
-            }
-        }
-        val result = JSONObject()
-        result.put("version", Build.VERSION.SDK_INT)
-        result.put("w", w)
-        result.put("h", h)
-        result.put("codecs", codecArray)
-        FFI.setCodecInfo(result.toString())
-    }
-
     private fun onVoiceCallStarted() {
         var ok = false
         mainService?.let {
@@ -403,7 +331,7 @@ class MainActivity : FlutterActivity() {
     override fun onStop() {
         super.onStop()
         val disableFloatingWindow = FFI.getLocalOption("disable-floating-window") == "Y"
-        if (!disableFloatingWindow && MainService.isReady) {
+        if (!disableFloatingWindow && CaptureService.isReady) {
             startService(Intent(this, FloatingWindowService::class.java))
         }
     }

@@ -60,7 +60,7 @@ mod whiteboard;
 mod updater;
 
 mod ui_cm_interface;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 mod skyydesk_capi;
 mod ui_interface;
 mod ui_session_interface;

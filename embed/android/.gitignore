@@ -1,0 +1,5 @@
+.gradle/
+build/
+skyydesk/build/
+../examples/android/build/
+local.properties

@@ -1,6 +1,6 @@
 # SkyyDesk embedding library
 
-`skyydesk.dll` (Windows) and `libskyydesk.so` (Linux) make the machine your application runs on
+`skyydesk.dll` (Windows), `libskyydesk.so` (Linux) and `SkyyDesk-Embed-Android.aar` (Android) make the device your application runs on
 reachable from SkyyDesk. People connect to it from the SkyyDesk app or from
 `https://skyydesk.com/webclient`; your application decides who gets in.
 
@@ -13,9 +13,10 @@ The library has no sign-in. Users, address books and licences are managed at
 |---|---|
 | Windows 10/11 64-bit | `skyydesk.dll` and the DLLs shipped next to it |
 | Linux 64-bit (X11) | `libskyydesk.so` and the system packages below |
+| Android 7.0 or later, 64-bit ARM | `SkyyDesk-Embed-Android.aar`, see [Android](#android) |
 | An enrollment key (optional) | panel → Settings → Enrollment keys |
 
-Android, iOS and web pages cannot be the machine that is connected to through this library.
+iOS devices and web pages cannot be the machine that is connected to through this library.
 See [Platforms](#platforms).
 
 On Debian or Ubuntu, the library needs the same packages as the SkyyDesk desktop client:
@@ -120,13 +121,69 @@ dotnet add package SkyyDesk --version 1.4.10
 The package carries the native library for Windows x64 and Linux x64; it is copied next to your
 executable on build.
 
+## Android
+
+The same library, packaged for Android with the screen-capture and input services Android
+requires. These are the services the SkyyDesk Android app uses.
+
+`SkyyDesk-Embed-Android.aar` is downloaded from `https://skyydesk.com/gelistiriciler/`. Put it in
+your app's `libs` folder:
+
+```groovy
+dependencies {
+    implementation files("libs/SkyyDesk-Embed-Android.aar")
+    // A local .aar does not bring its dependencies; add these two.
+    implementation "androidx.core:core:1.13.1"
+    implementation "com.google.protobuf:protobuf-javalite:3.20.1"
+}
+```
+
+```kotlin
+class App : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        SkyyDesk.init(this)
+    }
+}
+
+// in an Activity
+SkyyDesk.listener = object : SkyyDesk.Listener {
+    override fun onIncoming(connection: SkyyDesk.Connection) {
+        if (!connection.authorized) askTheUser(connection)   // then SkyyDesk.accept(id) or close(id)
+    }
+}
+SkyyDesk.setEnrollKey("sdk_...")
+SkyyDesk.start(this, allowPassword = false)
+```
+
+Set the listener in your Activity's `onCreate` and clear it in `onDestroy`. A connection still waiting
+for `accept` or `close` is reported again to the next listener.
+
+What the person holding the device sees:
+
+1. On `start`, Android asks to allow screen recording. Without it the device does not appear online.
+2. While sharing, a notification stays in the status bar; Android does not allow sharing without one.
+3. Touch and keys from the other side need **SkyyDesk Input** switched on under Settings →
+   Accessibility. Only the user can switch it on; `SkyyDesk.openInputSettings(context)` opens
+   that page. Without it the other side can only watch.
+4. Text copied on the other side lands on the device clipboard. Text copied on the device reaches
+   the other side only while your app is in front: Android does not let an app in the background
+   read the clipboard.
+
+The package declares its services and permissions in its own manifest; they are merged into yours.
+To use your own notification icon and colour, add a drawable `skyydesk_notification` and a colour
+`skyydesk_notification` to your app.
+
+A complete app: [`examples/android`](examples/android). Build the package and the example with
+`./tools/build-android.sh --aar`.
+
 ## Platforms
 
 | platform | as the machine connected to | note |
 |---|---|---|
 | Windows 10/11 | yes | run it in an application the user starts in their own session; as a Windows service it sees no desktop and receives no connections |
 | Linux (X11) | yes | Wayland asks the user to share the screen every session |
-| Android | not yet | Android lets an app share its screen only through its own permission screens and services; a package for that is in progress |
+| Android 7.0+ (arm64) | yes | the user allows screen capture each time sharing starts, and switches on SkyyDesk Input once for touch; see [Android](#android) |
 | iOS | no | iOS does not let an app control the screen |
 | web page | no | a browser does not let a page control the computer. To connect **from** a web application, open `https://skyydesk.com/webclient` |
 

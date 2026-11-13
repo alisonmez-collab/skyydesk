@@ -1,0 +1,37 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+}
+
+android {
+    namespace "com.skyydesk.example"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.skyydesk.example"
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+    }
+
+    sourceSets {
+        main.java.srcDirs += "src/main/kotlin"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+}
+
+dependencies {
+    // In your own project: implementation files("libs/skyydesk.aar") and the two below.
+    implementation project(":skyydesk")
+    implementation "androidx.core:core:1.13.1"
+    implementation "com.google.protobuf:protobuf-javalite:3.20.1"
+}

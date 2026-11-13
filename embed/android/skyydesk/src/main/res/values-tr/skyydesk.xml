@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="skyydesk_input_service_name">SkyyDesk Girişi</string>
+    <string name="skyydesk_accessibility_description">SkyyDesk ekran paylaşımı kurulduğunda, diğer cihazların sanal dokunuşla telefonunuzu kontrol etmesine izin verir.</string>
+</resources>

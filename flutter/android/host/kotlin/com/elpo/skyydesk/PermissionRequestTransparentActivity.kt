@@ -2,6 +2,7 @@ package com.elpo.skyydesk
 
 import android.app.Activity
 import android.content.Intent
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
@@ -18,7 +19,16 @@ class PermissionRequestTransparentActivity: Activity() {
             ACT_REQUEST_MEDIA_PROJECTION -> {
                 val mediaProjectionManager =
                     getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                val intent = mediaProjectionManager.createScreenCaptureIntent()
+                // Android 14 offers "A single app" first; that app's window is all the other side
+                // would see, and nothing at all once it goes to the background. Remote support needs
+                // the whole screen, so only that choice is offered.
+                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    mediaProjectionManager.createScreenCaptureIntent(
+                        MediaProjectionConfig.createConfigForDefaultDisplay()
+                    )
+                } else {
+                    mediaProjectionManager.createScreenCaptureIntent()
+                }
                 startActivityForResult(intent, REQ_REQUEST_MEDIA_PROJECTION)
             }
             else -> finish()
@@ -39,8 +49,12 @@ class PermissionRequestTransparentActivity: Activity() {
     }
 
     private fun launchService(mediaProjectionResultIntent: Intent) {
-        Log.d(logTag, "Launch MainService")
-        val serviceIntent = Intent(this, MainService::class.java)
+        val service = intent.getStringExtra(EXT_SERVICE_CLASS) ?: run {
+            Log.e(logTag, "no capture service named in the request")
+            return
+        }
+        Log.d(logTag, "Launch $service")
+        val serviceIntent = Intent().setClassName(this, service)
         serviceIntent.action = ACT_INIT_MEDIA_PROJECTION_AND_SERVICE
         serviceIntent.putExtra(EXT_MEDIA_PROJECTION_RES_INTENT, mediaProjectionResultIntent)
 
